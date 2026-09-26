@@ -48,7 +48,11 @@ const EXPENSE_CATEGORIES = [
 
 const PAYMENT_METHODS = ["Card", "Cash", "Bank Transfer", "Other"];
 
-const OWNER_EMAIL = "fdazzato@gmail.com";
+const ALLOWED_EMAILS = ["fdazzato@gmail.com", "mmazzatopaz@gmail.com"] as const;
+
+function isAllowedEmail(email?: string | null) {
+  return !!email && ALLOWED_EMAILS.includes(email.toLowerCase() as (typeof ALLOWED_EMAILS)[number]);
+}
 const supabase = createClient(
   "https://ltxnpfnuifltxdfcaoni.supabase.co",
   "sb_publishable_KOk0kOjwf62LdX_DH6AMxg_QWJGL-3a"
@@ -85,8 +89,10 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMessage, setAuthMessage] = useState("");
+  const [email, setEmail] = useState("fdazzato@gmail.com");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [creatingAccount, setCreatingAccount] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [view, setView] = useState<"month" | "year">("month");
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
@@ -112,7 +118,7 @@ export default function Home() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!active) return;
       setUser(user);
-      if (user?.email?.toLowerCase() === OWNER_EMAIL) {
+      if (isAllowedEmail(user?.email)) {
         await loadTransactions();
       }
       setAuthLoading(false);
@@ -124,7 +130,7 @@ export default function Home() {
       if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
       const nextUser = session?.user ?? null;
       setUser(nextUser);
-      if (nextUser?.email?.toLowerCase() === OWNER_EMAIL) {
+      if (isAllowedEmail(nextUser?.email)) {
         await loadTransactions();
       } else {
         setTransactions([]);
@@ -169,8 +175,13 @@ export default function Home() {
   async function signInWithPassword(e?: FormEvent) {
     e?.preventDefault();
     setAuthMessage("Ingresando...");
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!isAllowedEmail(normalizedEmail)) {
+      setAuthMessage("Este email no está habilitado para Money Lens.");
+      return;
+    }
     const { error } = await supabase.auth.signInWithPassword({
-      email: OWNER_EMAIL,
+      email: normalizedEmail,
       password,
     });
     if (error) {
@@ -182,8 +193,13 @@ export default function Home() {
   }
 
   async function sendPasswordSetupLink() {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!isAllowedEmail(normalizedEmail)) {
+      setAuthMessage("Este email no está habilitado para Money Lens.");
+      return;
+    }
     setAuthMessage("Enviando email...");
-    const { error } = await supabase.auth.resetPasswordForEmail(OWNER_EMAIL, {
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo: window.location.origin,
     });
     setAuthMessage(
@@ -191,6 +207,35 @@ export default function Home() {
         ? error.message
         : "Te envié un email para crear o restablecer tu contraseña."
     );
+  }
+
+  async function createAccount(e?: FormEvent) {
+    e?.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!isAllowedEmail(normalizedEmail)) {
+      setAuthMessage("Este email no está habilitado para Money Lens.");
+      return;
+    }
+    if (password.length < 8) {
+      setAuthMessage("Usá una contraseña de al menos 8 caracteres.");
+      return;
+    }
+    setAuthMessage("Creando cuenta...");
+    const { data, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+    if (data.session) {
+      setAuthMessage("Cuenta creada. Ya podés usar Money Lens.");
+    } else {
+      setAuthMessage("Cuenta creada. Revisá tu email para confirmar el acceso.");
+    }
+    setCreatingAccount(false);
   }
 
   async function saveNewPassword(e?: FormEvent) {
@@ -283,7 +328,7 @@ export default function Home() {
 
     const amountUSD = currency === "USD" ? numericAmount : numericAmount / numericFx;
 
-    if (!user || user.email?.toLowerCase() !== OWNER_EMAIL) return;
+    if (!user || !isAllowedEmail(user.email)) return;
 
     const { error } = await supabase.from("transactions").insert({
       user_id: user.id,
@@ -329,13 +374,13 @@ export default function Home() {
     return <main className="authShell"><div className="authCard"><h1>Money Lens</h1><p>Verificando acceso...</p></div></main>;
   }
 
-  if (recoveryMode && user?.email?.toLowerCase() === OWNER_EMAIL) {
+  if (recoveryMode && isAllowedEmail(user?.email)) {
     return (
       <main className="authShell">
         <form className="authCard" onSubmit={saveNewPassword}>
           <p className="eyebrow">PRIVATE ACCESS</p>
           <h1>Crear contraseña</h1>
-          <p>Elegí una contraseña nueva para <strong>{OWNER_EMAIL}</strong>.</p>
+          <p>Elegí una contraseña nueva para <strong>{user?.email}</strong>.</p>
           <input
             className="authInput"
             type="password"
@@ -353,28 +398,47 @@ export default function Home() {
     );
   }
 
-  if (!user || user.email?.toLowerCase() !== OWNER_EMAIL) {
+  if (!user || !isAllowedEmail(user.email)) {
     return (
       <main className="authShell">
-        <form className="authCard" onSubmit={signInWithPassword}>
+        <form className="authCard" onSubmit={creatingAccount ? createAccount : signInWithPassword}>
           <p className="eyebrow">PRIVATE ACCESS</p>
           <h1>Money Lens</h1>
-          <p>Usuario: <strong>{OWNER_EMAIL}</strong></p>
+          <p>Acceso habilitado únicamente para usuarios autorizados.</p>
+          <input
+            className="authInput"
+            type="email"
+            autoComplete="username"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
           <input
             className="authInput"
             type="password"
-            autoComplete="current-password"
-            placeholder="Contraseña"
+            autoComplete={creatingAccount ? "new-password" : "current-password"}
+            minLength={8}
+            placeholder={creatingAccount ? "Elegí una contraseña" : "Contraseña"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          <button className="primary authButton" type="submit">Entrar</button>
-          <button className="secondaryAuthButton" type="button" onClick={sendPasswordSetupLink}>
-            Crear o restablecer contraseña
+          <button className="primary authButton" type="submit">{creatingAccount ? "Crear cuenta" : "Entrar"}</button>
+          <button
+            className="secondaryAuthButton"
+            type="button"
+            onClick={() => { setCreatingAccount((v) => !v); setAuthMessage(""); }}
+          >
+            {creatingAccount ? "Ya tengo cuenta" : "Crear cuenta nueva"}
           </button>
+          {!creatingAccount && (
+            <button className="secondaryAuthButton" type="button" onClick={sendPasswordSetupLink}>
+              Restablecer contraseña
+            </button>
+          )}
           {authMessage && <p className="authMessage">{authMessage}</p>}
-          <p className="authHint">La primera vez necesitás crear la contraseña. Después entrás siempre con usuario y contraseña.</p>
+          <p className="authHint">Cada usuario tiene sus propios movimientos. Los datos nunca se mezclan entre cuentas.</p>
         </form>
       </main>
     );
@@ -394,7 +458,7 @@ export default function Home() {
         </nav>
         <div className="sidebarFoot accountFoot">
           <span className="statusDot online" />
-          <div><strong>{OWNER_EMAIL}</strong><button className="signOut" onClick={signOut}>Sign out</button></div>
+          <div><strong>{user?.email}</strong><button className="signOut" onClick={signOut}>Sign out</button></div>
         </div>
       </aside>
 
