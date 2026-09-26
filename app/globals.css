@@ -191,3 +191,8 @@ td { padding: 13px 8px; border-bottom: 1px solid #f0f2f3; }
   cursor: pointer;
 }
 .secondaryAuthButton:hover { background: #f6f8f9; }
+
+.googleButton {
+  margin-top: 16px;
+  min-height: 48px;
+}
