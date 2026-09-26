@@ -207,3 +207,169 @@ td { padding: 13px 8px; border-bottom: 1px solid #f0f2f3; }
 @media (max-width: 640px) {
   .passwordChangeRow { grid-template-columns: 1fr; }
 }
+
+/* Visual dashboard refresh */
+body {
+  background:
+    radial-gradient(circle at 80% -10%, rgba(20,108,91,.08), transparent 30%),
+    var(--bg);
+}
+.metricCard {
+  position: relative;
+  overflow: hidden;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.metricCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgba(20,40,50,.07);
+}
+.metricCard::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  right: 20px;
+  bottom: 0;
+  height: 3px;
+  border-radius: 99px 99px 0 0;
+  background: linear-gradient(90deg, var(--accent), #77a99f);
+  opacity: .7;
+}
+.visualPanel { min-height: 100%; }
+.panelHeadActions {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 10px;
+}
+.viewToggle {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 9px;
+  background: #f1f4f5;
+}
+.miniSeg {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 9px;
+  border-radius: 7px;
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.miniSeg.active {
+  background: white;
+  color: var(--ink);
+  box-shadow: 0 1px 4px rgba(20,40,50,.08);
+}
+.pieLayout {
+  display: grid;
+  grid-template-columns: minmax(190px, .8fr) 1.2fr;
+  gap: 24px;
+  align-items: center;
+}
+.donutWrap {
+  display: grid;
+  place-items: center;
+}
+.donut {
+  width: 210px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.35);
+}
+.donutCenter {
+  width: 58%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  background: white;
+  box-shadow: 0 4px 20px rgba(20,40,50,.08);
+}
+.donutCenter span {
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+.donutCenter strong {
+  font-size: 16px;
+  letter-spacing: -.3px;
+}
+.pieLegend {
+  display: grid;
+  gap: 9px;
+}
+.pieLegendRow {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  gap: 9px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f2f3;
+}
+.legendSwatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.pieLegendRow div {
+  display: grid;
+  gap: 2px;
+}
+.pieLegendRow strong { font-size: 12px; }
+.pieLegendRow small { color: var(--muted); font-size: 10px; }
+.pieLegendRow > span:last-child {
+  font-size: 12px;
+  font-weight: 800;
+}
+.insightGrid {
+  grid-template-columns: 1fr 1fr;
+}
+.compactPie {
+  grid-template-columns: minmax(170px, .8fr) 1.2fr;
+}
+.savingsDonut, .smallDonut { width: 185px; }
+.savingsDetails {
+  display: grid;
+  gap: 2px;
+}
+.summaryLine {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid #eef1f3;
+  color: var(--muted);
+  font-size: 12px;
+}
+.summaryLine strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+.summaryLine.highlight {
+  color: var(--accent);
+  border-bottom: 0;
+  font-weight: 800;
+}
+.summaryLine.highlight strong { color: var(--accent); }
+.overspendNote {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8eeee;
+  color: #965656;
+  font-size: 11px;
+}
+@media (max-width: 900px) {
+  .insightGrid { grid-template-columns: 1fr; }
+  .pieLayout { grid-template-columns: 1fr; }
+}
+@media (max-width: 650px) {
+  .panelHeadActions { align-items: flex-end; }
+  .donut { width: 190px; }
+  .savingsDonut, .smallDonut { width: 170px; }
+}
