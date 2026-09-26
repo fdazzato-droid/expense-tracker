@@ -137,3 +137,29 @@ td { padding: 13px 8px; border-bottom: 1px solid #f0f2f3; }
   .conversionPreview { margin: 0; }
   .trendChart { gap: 6px; }
 }
+
+
+.authShell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #f4f6f8;
+}
+.authCard {
+  width: min(430px, 100%);
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 34px;
+  box-shadow: 0 12px 40px rgba(20,40,50,.08);
+}
+.authCard h1 { margin: 6px 0 12px; font-size: 32px; }
+.authCard p { color: var(--muted); line-height: 1.55; }
+.authButton { width: 100%; margin-top: 14px; }
+.authMessage { padding: 10px 12px; background: var(--accent-soft); border-radius: 10px; color: #456d64 !important; font-size: 13px; }
+.authHint { font-size: 12px; margin-top: 16px; }
+.accountFoot { align-items: flex-start; }
+.accountFoot strong { display: block; color: #cbd6da; font-size: 11px; overflow-wrap: anywhere; }
+.signOut { border: 0; background: transparent; color: #8fa4ad; padding: 4px 0 0; font-size: 11px; cursor: pointer; }
+.statusDot.online { background: #64b59e; }
