@@ -196,3 +196,14 @@ td { padding: 13px 8px; border-bottom: 1px solid #f0f2f3; }
   margin-top: 16px;
   min-height: 48px;
 }
+
+.passwordChangeRow {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+.passwordChangeRow .authInput { margin-top: 0; }
+@media (max-width: 640px) {
+  .passwordChangeRow { grid-template-columns: 1fr; }
+}
