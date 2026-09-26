@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { createClient, type User } from "@supabase/supabase-js";
 
 type Currency = "USD" | "UYU";
 type EntryType = "expense" | "income";
@@ -47,6 +48,12 @@ const EXPENSE_CATEGORIES = [
 
 const PAYMENT_METHODS = ["Card", "Cash", "Bank Transfer", "Other"];
 
+const OWNER_EMAIL = "fdazzato@gmail.com";
+const supabase = createClient(
+  "https://ltxnpfnuifltxdfcaoni.supabase.co",
+  "sb_publishable_KOk0kOjwf62LdX_DH6AMxg_QWJGL-3a"
+);
+
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -75,7 +82,9 @@ function pct(value: number) {
 
 export default function Home() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authMessage, setAuthMessage] = useState("");
   const [view, setView] = useState<"month" | "year">("month");
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
   const [selectedYear, setSelectedYear] = useState(todayISO().slice(0, 4));
@@ -91,22 +100,81 @@ export default function Home() {
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    const saved = localStorage.getItem("expense-tracker-transactions");
-    if (saved) {
-      try {
-        setTransactions(JSON.parse(saved));
-      } catch {
-        localStorage.removeItem("expense-tracker-transactions");
+    let active = true;
+
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!active) return;
+      setUser(user);
+      if (user?.email?.toLowerCase() === OWNER_EMAIL) {
+        await loadTransactions();
       }
+      setAuthLoading(false);
     }
-    setReady(true);
+
+    load();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const nextUser = session?.user ?? null;
+      setUser(nextUser);
+      if (nextUser?.email?.toLowerCase() === OWNER_EMAIL) {
+        await loadTransactions();
+      } else {
+        setTransactions([]);
+      }
+      setAuthLoading(false);
+    });
+
+    return () => {
+      active = false;
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
-  useEffect(() => {
-    if (ready) {
-      localStorage.setItem("expense-tracker-transactions", JSON.stringify(transactions));
+  async function loadTransactions() {
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("*")
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setAuthMessage(error.message);
+      return;
     }
-  }, [transactions, ready]);
+
+    setTransactions((data ?? []).map((row) => ({
+      id: row.id,
+      date: row.date,
+      type: row.type,
+      expenseKind: row.expense_kind ?? undefined,
+      category: row.category,
+      amountOriginal: Number(row.amount_original),
+      currency: row.currency,
+      fxRate: Number(row.fx_rate),
+      amountUSD: Number(row.amount_usd),
+      paymentMethod: row.payment_method ?? undefined,
+      notes: row.notes ?? undefined,
+      createdAt: row.created_at,
+    })));
+  }
+
+  async function sendLoginLink() {
+    setAuthMessage("Enviando enlace...");
+    const { error } = await supabase.auth.signInWithOtp({
+      email: OWNER_EMAIL,
+      options: {
+        emailRedirectTo: window.location.origin,
+        shouldCreateUser: true,
+      },
+    });
+    setAuthMessage(error ? error.message : "Te envié un enlace de acceso a tu email.");
+  }
+
+  async function signOut() {
+    await supabase.auth.signOut();
+    setTransactions([]);
+  }
 
   const current = useMemo(() => {
     return transactions.filter((t) =>
@@ -164,7 +232,7 @@ export default function Home() {
     return [...months.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-12);
   }, [transactions]);
 
-  function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const numericAmount = Number(amount);
     const numericFx = Number(fxRate);
@@ -174,28 +242,39 @@ export default function Home() {
 
     const amountUSD = currency === "USD" ? numericAmount : numericAmount / numericFx;
 
-    const tx: Transaction = {
-      id: crypto.randomUUID(),
+    if (!user || user.email?.toLowerCase() !== OWNER_EMAIL) return;
+
+    const { error } = await supabase.from("transactions").insert({
+      user_id: user.id,
       date,
       type,
-      expenseKind: type === "expense" ? expenseKind : undefined,
+      expense_kind: type === "expense" ? expenseKind : null,
       category: type === "income" ? "Income" : category,
-      amountOriginal: numericAmount,
+      amount_original: numericAmount,
       currency,
-      fxRate: currency === "USD" ? 1 : numericFx,
-      amountUSD,
-      paymentMethod: type === "expense" ? paymentMethod : undefined,
-      notes: notes.trim() || undefined,
-      createdAt: new Date().toISOString(),
-    };
+      fx_rate: currency === "USD" ? 1 : numericFx,
+      amount_usd: Number(amountUSD.toFixed(2)),
+      payment_method: type === "expense" ? paymentMethod : null,
+      notes: notes.trim() || null,
+    });
 
-    setTransactions((prev) => [tx, ...prev]);
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+
     setAmount("");
     setNotes("");
+    await loadTransactions();
   }
 
-  function removeTransaction(id: string) {
-    setTransactions((prev) => prev.filter((t) => t.id !== id));
+  async function removeTransaction(id: string) {
+    const { error } = await supabase.from("transactions").delete().eq("id", id);
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+    await loadTransactions();
   }
 
   const expenseChange = stats.prev.expenses > 0
@@ -204,6 +283,25 @@ export default function Home() {
 
   const maxCategory = categoryBreakdown[0]?.[1] || 1;
   const maxTrend = Math.max(...monthlyTrend.flatMap(([, v]) => [v.expenses, v.income]), 1);
+
+  if (authLoading) {
+    return <main className="authShell"><div className="authCard"><h1>Money Lens</h1><p>Verificando acceso...</p></div></main>;
+  }
+
+  if (!user || user.email?.toLowerCase() !== OWNER_EMAIL) {
+    return (
+      <main className="authShell">
+        <div className="authCard">
+          <p className="eyebrow">PRIVATE ACCESS</p>
+          <h1>Money Lens</h1>
+          <p>Esta app está reservada para <strong>{OWNER_EMAIL}</strong>.</p>
+          <button className="primary authButton" onClick={sendLoginLink}>Enviar enlace de acceso</button>
+          {authMessage && <p className="authMessage">{authMessage}</p>}
+          <p className="authHint">Abrí el email desde el dispositivo donde querés usar la app. No necesitás crear una contraseña.</p>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="shell">
@@ -217,9 +315,9 @@ export default function Home() {
           <a href="#add" className="navItem">Add movement</a>
           <a href="#history" className="navItem">History</a>
         </nav>
-        <div className="sidebarFoot">
-          <span className="statusDot" />
-          Data is stored locally for this MVP
+        <div className="sidebarFoot accountFoot">
+          <span className="statusDot online" />
+          <div><strong>{OWNER_EMAIL}</strong><button className="signOut" onClick={signOut}>Sign out</button></div>
         </div>
       </aside>
 
