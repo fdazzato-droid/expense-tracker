@@ -47,6 +47,18 @@ const EXPENSE_CATEGORIES = [
 ];
 
 const PAYMENT_METHODS = ["Card", "Cash", "Bank Transfer", "Other"];
+const PIE_COLORS = ["#146c5b", "#284653", "#77a99f", "#d8a64b", "#7d8fa3", "#b7795f", "#b9c5cb"];
+
+function pieGradient(items: { value: number; color: string }[]) {
+  const total = items.reduce((sum, item) => sum + item.value, 0);
+  if (total <= 0) return "#eef1f3";
+  let cursor = 0;
+  return `conic-gradient(${items.map((item) => {
+    const start = cursor;
+    cursor += (item.value / total) * 100;
+    return `${item.color} ${start}% ${cursor}%`;
+  }).join(", ")})`;
+}
 
 const ALLOWED_EMAILS = ["fdazzato@gmail.com", "mmazzatopaz@gmail.com"] as const;
 
@@ -97,6 +109,7 @@ export default function Home() {
   const [view, setView] = useState<"month" | "year">("month");
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
   const [selectedYear, setSelectedYear] = useState(todayISO().slice(0, 4));
+  const [spendingView, setSpendingView] = useState<"bars" | "pie">("pie");
 
   const [type, setType] = useState<EntryType>("expense");
   const [expenseKind, setExpenseKind] = useState<ExpenseKind>("variable");
@@ -296,6 +309,27 @@ export default function Home() {
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
   }, [current]);
 
+  const pieCategories = useMemo(() => {
+    const top = categoryBreakdown.slice(0, 6);
+    const remainder = categoryBreakdown.slice(6).reduce((sum, [, value]) => sum + value, 0);
+    const items = remainder > 0 ? [...top, ["Other", remainder] as [string, number]] : top;
+    return items.map(([name, value], index) => ({
+      name,
+      value,
+      color: PIE_COLORS[index % PIE_COLORS.length],
+    }));
+  }, [categoryBreakdown]);
+
+  const savingsAllocation = useMemo(() => {
+    if (stats.now.income <= 0) return [];
+    const spent = Math.min(stats.now.expenses, stats.now.income);
+    const saved = Math.max(stats.now.savings, 0);
+    return [
+      { name: "Spent", value: spent, color: "#284653" },
+      { name: "Saved", value: saved, color: "#77a99f" },
+    ].filter((item) => item.value > 0);
+  }, [stats.now.income, stats.now.expenses, stats.now.savings]);
+
   const fixedVsVariable = useMemo(() => {
     const fixed = current
       .filter((t) => t.type === "expense" && t.expenseKind === "fixed")
@@ -487,16 +521,45 @@ export default function Home() {
         </section>
 
         <section className="gridTwo">
-          <div className="panel">
+          <div className="panel visualPanel">
             <div className="panelHead">
               <div>
                 <p className="eyebrow">SPENDING</p>
                 <h2>Where your money goes</h2>
               </div>
-              <strong>{usd(stats.now.expenses)}</strong>
+              <div className="panelHeadActions">
+                <strong>{usd(stats.now.expenses)}</strong>
+                <div className="viewToggle">
+                  <button className={spendingView === "pie" ? "miniSeg active" : "miniSeg"} onClick={() => setSpendingView("pie")}>Pie</button>
+                  <button className={spendingView === "bars" ? "miniSeg active" : "miniSeg"} onClick={() => setSpendingView("bars")}>Bars</button>
+                </div>
+              </div>
             </div>
             {categoryBreakdown.length === 0 ? (
               <EmptyState text="Add your first expense to see the breakdown." />
+            ) : spendingView === "pie" ? (
+              <div className="pieLayout">
+                <div className="donutWrap">
+                  <div className="donut" style={{ background: pieGradient(pieCategories) }}>
+                    <div className="donutCenter">
+                      <span>Expenses</span>
+                      <strong>{usd(stats.now.expenses)}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="pieLegend">
+                  {pieCategories.map((item) => (
+                    <div className="pieLegendRow" key={item.name}>
+                      <span className="legendSwatch" style={{ background: item.color }} />
+                      <div>
+                        <strong>{item.name}</strong>
+                        <small>{stats.now.expenses > 0 ? pct((item.value / stats.now.expenses) * 100) : "0%"}</small>
+                      </div>
+                      <span>{usd(item.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ) : (
               <div className="bars">
                 {categoryBreakdown.slice(0, 8).map(([name, value]) => (
@@ -529,6 +592,69 @@ export default function Home() {
                   : "Add monthly income to calculate your savings rate."}</p>
               </div>
             </div>
+          </div>
+        </section>
+
+        <section className="gridTwo insightGrid">
+          <div className="panel visualPanel">
+            <div className="panelHead">
+              <div>
+                <p className="eyebrow">SAVINGS</p>
+                <h2>Income allocation</h2>
+              </div>
+              <strong>{pct(stats.now.savingsRate)}</strong>
+            </div>
+            {stats.now.income <= 0 ? (
+              <EmptyState text="Add income to visualize savings." />
+            ) : (
+              <div className="pieLayout compactPie">
+                <div className="donutWrap">
+                  <div className="donut savingsDonut" style={{ background: pieGradient(savingsAllocation) }}>
+                    <div className="donutCenter">
+                      <span>Saved</span>
+                      <strong>{usd(Math.max(stats.now.savings, 0))}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="savingsDetails">
+                  <div className="summaryLine"><span>Income</span><strong>{usd(stats.now.income)}</strong></div>
+                  <div className="summaryLine"><span>Expenses</span><strong>{usd(stats.now.expenses)}</strong></div>
+                  <div className="summaryLine highlight"><span>Net savings</span><strong>{usd(stats.now.savings)}</strong></div>
+                  {stats.now.savings < 0 && <p className="overspendNote">Expenses exceed income by {usd(Math.abs(stats.now.savings))}.</p>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="panel visualPanel">
+            <div className="panelHead">
+              <div>
+                <p className="eyebrow">EXPENSE MIX</p>
+                <h2>Fixed vs variable</h2>
+              </div>
+            </div>
+            {stats.now.expenses <= 0 ? (
+              <EmptyState text="Add expenses to visualize the mix." />
+            ) : (
+              <div className="pieLayout compactPie">
+                <div className="donutWrap">
+                  <div className="donut smallDonut" style={{ background: pieGradient([
+                    { value: fixedVsVariable.fixed, color: "#284653" },
+                    { value: fixedVsVariable.variable, color: "#77a99f" },
+                  ]) }}>
+                    <div className="donutCenter">
+                      <span>Total</span>
+                      <strong>{usd(stats.now.expenses)}</strong>
+                    </div>
+                  </div>
+                </div>
+                <div className="savingsDetails">
+                  <div className="summaryLine"><span>Fixed</span><strong>{usd(fixedVsVariable.fixed)}</strong></div>
+                  <div className="summaryLine"><span>Variable</span><strong>{usd(fixedVsVariable.variable)}</strong></div>
+                  <div className="summaryLine highlight"><span>Variable share</span><strong>{pct(stats.now.expenses ? (fixedVsVariable.variable / stats.now.expenses) * 100 : 0)}</strong></div>
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
