@@ -85,9 +85,6 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMessage, setAuthMessage] = useState("");
-  const [password, setPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [recoveryMode, setRecoveryMode] = useState(false);
   const [view, setView] = useState<"month" | "year">("month");
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
   const [selectedYear, setSelectedYear] = useState(todayISO().slice(0, 4));
@@ -106,9 +103,6 @@ export default function Home() {
     let active = true;
 
     async function load() {
-      if (typeof window !== "undefined" && window.location.hash.includes("type=recovery")) {
-        setRecoveryMode(true);
-      }
       const { data: { user } } = await supabase.auth.getUser();
       if (!active) return;
       setUser(user);
@@ -120,8 +114,7 @@ export default function Home() {
 
     load();
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       const nextUser = session?.user ?? null;
       setUser(nextUser);
       if (nextUser?.email?.toLowerCase() === OWNER_EMAIL) {
@@ -166,50 +159,15 @@ export default function Home() {
     })));
   }
 
-  async function signInWithPassword(e?: FormEvent) {
-    e?.preventDefault();
-    setAuthMessage("Ingresando...");
-    const { error } = await supabase.auth.signInWithPassword({
-      email: OWNER_EMAIL,
-      password,
+  async function signInWithGoogle() {
+    setAuthMessage("Abriendo Google...");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin,
+      },
     });
-    if (error) {
-      setAuthMessage("Contraseña incorrecta o todavía no configurada.");
-      return;
-    }
-    setAuthMessage("");
-    setPassword("");
-  }
-
-  async function sendPasswordSetupLink() {
-    setAuthMessage("Enviando email para crear/restablecer contraseña...");
-    const { error } = await supabase.auth.resetPasswordForEmail(OWNER_EMAIL, {
-      redirectTo: window.location.origin,
-    });
-    setAuthMessage(
-      error
-        ? error.message
-        : "Te envié un email. Abrí el enlace y elegí tu nueva contraseña."
-    );
-  }
-
-  async function saveNewPassword(e?: FormEvent) {
-    e?.preventDefault();
-    if (newPassword.length < 8) {
-      setAuthMessage("Usá una contraseña de al menos 8 caracteres.");
-      return;
-    }
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    if (error) {
-      setAuthMessage(error.message);
-      return;
-    }
-    setNewPassword("");
-    setRecoveryMode(false);
-    setAuthMessage("Contraseña guardada. Ya podés usar la app normalmente.");
-    if (typeof window !== "undefined") {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
+    if (error) setAuthMessage(error.message);
   }
 
   async function signOut() {
@@ -329,54 +287,19 @@ export default function Home() {
     return <main className="authShell"><div className="authCard"><h1>Money Lens</h1><p>Verificando acceso...</p></div></main>;
   }
 
-  if (recoveryMode && user?.email?.toLowerCase() === OWNER_EMAIL) {
-    return (
-      <main className="authShell">
-        <form className="authCard" onSubmit={saveNewPassword}>
-          <p className="eyebrow">PRIVATE ACCESS</p>
-          <h1>Crear contraseña</h1>
-          <p>Elegí una contraseña para <strong>{OWNER_EMAIL}</strong>.</p>
-          <input
-            className="authInput"
-            type="password"
-            autoComplete="new-password"
-            minLength={8}
-            placeholder="Nueva contraseña"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            required
-          />
-          <button className="primary authButton" type="submit">Guardar contraseña</button>
-          {authMessage && <p className="authMessage">{authMessage}</p>}
-          <p className="authHint">Después vas a poder entrar desde PC o teléfono sin pedir emails de acceso.</p>
-        </form>
-      </main>
-    );
-  }
-
   if (!user || user.email?.toLowerCase() !== OWNER_EMAIL) {
     return (
       <main className="authShell">
-        <form className="authCard" onSubmit={signInWithPassword}>
+        <div className="authCard">
           <p className="eyebrow">PRIVATE ACCESS</p>
           <h1>Money Lens</h1>
           <p>Acceso exclusivo para <strong>{OWNER_EMAIL}</strong>.</p>
-          <input
-            className="authInput"
-            type="password"
-            autoComplete="current-password"
-            placeholder="Contraseña"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
-          <button className="primary authButton" type="submit">Entrar</button>
-          <button className="secondaryAuthButton" type="button" onClick={sendPasswordSetupLink}>
-            Crear o restablecer contraseña
+          <button className="primary authButton googleButton" type="button" onClick={signInWithGoogle}>
+            Continuar con Google
           </button>
           {authMessage && <p className="authMessage">{authMessage}</p>}
-          <p className="authHint">La primera vez usá “Crear o restablecer contraseña”. Después entrarás con tu contraseña.</p>
-        </form>
+          <p className="authHint">Usá tu cuenta de Google {OWNER_EMAIL}. No necesitás recibir emails de acceso ni recordar otra contraseña.</p>
+        </div>
       </main>
     );
   }
