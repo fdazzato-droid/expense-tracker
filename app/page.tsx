@@ -387,14 +387,20 @@ export default function Home() {
 
   const groupedExpenseSummary = useMemo(() => {
     const groups = new Map<string, Transaction[]>();
+
     periodCurrent
-      .filter((t) =>
-        t.type === "expense" &&
-        (
+      .filter((t) => {
+        if (t.type !== "expense") return false;
+
+        const categoryMatches =
+          dashboardCategories.length === 0 || dashboardCategories.includes(t.category);
+
+        const commitmentMatches =
           dashboardCommitments.length === 0 ||
-          dashboardCommitments.includes(commitmentTypeForTransaction(t))
-        )
-      )
+          dashboardCommitments.includes(commitmentTypeForTransaction(t));
+
+        return categoryMatches && commitmentMatches;
+      })
       .forEach((t) => {
         const items = groups.get(t.category) || [];
         items.push(t);
@@ -408,7 +414,7 @@ export default function Home() {
         items: items.sort((a, b) => b.date.localeCompare(a.date)),
       }))
       .sort((a, b) => b.total - a.total);
-  }, [periodCurrent]);
+  }, [periodCurrent, dashboardCategories, dashboardCommitments, recurringTransactions]);
 
   const pieCategories = useMemo(() => {
     const top = categoryBreakdown.slice(0, 6);
@@ -455,6 +461,29 @@ export default function Home() {
 
     return { oneOff, recurringOngoing, installments };
   }, [current, recurringById]);
+
+  const commitmentDetails = useMemo(() => {
+    const types = ["One-off", "Recurring ongoing", "Installments"] as const;
+
+    return types.map((name) => {
+      const items = periodCurrent
+        .filter((t) => {
+          if (t.type !== "expense") return false;
+
+          const categoryMatches =
+            dashboardCategories.length === 0 || dashboardCategories.includes(t.category);
+
+          return categoryMatches && commitmentTypeForTransaction(t) === name;
+        })
+        .sort((a, b) => b.date.localeCompare(a.date));
+
+      return {
+        name,
+        total: items.reduce((sum, t) => sum + t.amountUSD, 0),
+        items,
+      };
+    });
+  }, [periodCurrent, dashboardCategories, recurringTransactions]);
 
   const installmentSummary = useMemo(() => {
     const today = todayISO();
@@ -537,6 +566,12 @@ export default function Home() {
 
   function selectAllDashboardCategories() {
     setDashboardCategories([...EXPENSE_CATEGORIES]);
+  }
+
+  function focusCommitment(name: string) {
+    setDashboardCommitments((current) =>
+      current.length === 1 && current[0] === name ? [] : [name]
+    );
   }
 
   function toggleDashboardCommitment(name: string) {
@@ -1174,6 +1209,76 @@ export default function Home() {
           </div>
         </section>
 
+        <section className="panel commitmentDetailsPanel">
+          <div className="panelHead">
+            <div>
+              <p className="eyebrow">COMMITMENT DETAILS</p>
+              <h2>What makes up each commitment type</h2>
+            </div>
+            <span className="muted">
+              {dashboardCommitments.length === 0
+                ? "All types"
+                : dashboardCommitments.join(", ")}
+            </span>
+          </div>
+
+          <div className="commitmentQuickCards">
+            {commitmentDetails.map((group) => {
+              const active =
+                dashboardCommitments.length === 0 ||
+                dashboardCommitments.includes(group.name);
+
+              return (
+                <button
+                  type="button"
+                  key={group.name}
+                  className={active ? "commitmentQuickCard active" : "commitmentQuickCard"}
+                  onClick={() => focusCommitment(group.name)}
+                >
+                  <span>{group.name}</span>
+                  <strong>{usd(group.total)}</strong>
+                  <small>{group.items.length} {group.items.length === 1 ? "expense" : "expenses"}</small>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="commitmentDetailGroups">
+            {commitmentDetails
+              .filter((group) =>
+                dashboardCommitments.length === 0 ||
+                dashboardCommitments.includes(group.name)
+              )
+              .map((group) => (
+                <details className="commitmentDetailGroup" key={group.name} open>
+                  <summary>
+                    <div>
+                      <strong>{group.name}</strong>
+                      <span>{group.items.length} {group.items.length === 1 ? "movement" : "movements"}</span>
+                    </div>
+                    <strong>{usd(group.total)}</strong>
+                  </summary>
+
+                  {group.items.length === 0 ? (
+                    <div className="commitmentEmpty">No expenses of this type in the selected period.</div>
+                  ) : (
+                    <div className="commitmentMovementList">
+                      {group.items.map((t) => (
+                        <div className="commitmentMovementRow" key={t.id}>
+                          <div>
+                            <strong>{t.description}</strong>
+                            <small>{t.category} · {t.date}</small>
+                          </div>
+                          <span>{usd(t.amountUSD)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </details>
+              ))}
+          </div>
+        </section>
+
         <section className="panel installmentPanel">
           <div className="panelHead">
             <div>
@@ -1233,9 +1338,7 @@ export default function Home() {
             <EmptyState text="No expenses in this period." />
           ) : (
             <div className="groupSummaryList">
-              {groupedExpenseSummary
-                .filter((group) => dashboardCategories.length === 0 || dashboardCategories.includes(group.name))
-                .map((group) => (
+              {groupedExpenseSummary.map((group) => (
                   <details className="groupSummaryItem" key={group.name} open={dashboardCategories.length > 0}>
                     <summary>
                       <div>
