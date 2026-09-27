@@ -126,7 +126,8 @@ export default function Home() {
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
   const [selectedYear, setSelectedYear] = useState(todayISO().slice(0, 4));
   const [spendingView, setSpendingView] = useState<"bars" | "pie">("pie");
-  const [dashboardCategory, setDashboardCategory] = useState("All categories");
+  const [dashboardCategories, setDashboardCategories] = useState<string[]>([]);
+  const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
 
   const [type, setType] = useState<EntryType>("expense");
   const [date, setDate] = useState(todayISO());
@@ -315,18 +316,18 @@ export default function Home() {
   }, [transactions, view, selectedMonth, selectedYear]);
 
   const current = useMemo(() => {
-    if (dashboardCategory === "All categories") return periodCurrent;
+    if (dashboardCategories.length === 0) return periodCurrent;
     return periodCurrent.filter(
-      (t) => t.type === "income" || (t.type === "expense" && t.category === dashboardCategory)
+      (t) => t.type === "income" || (t.type === "expense" && dashboardCategories.includes(t.category))
     );
-  }, [periodCurrent, dashboardCategory]);
+  }, [periodCurrent, dashboardCategories]);
 
   const previous = useMemo(() => {
-    if (dashboardCategory === "All categories") return periodPrevious;
+    if (dashboardCategories.length === 0) return periodPrevious;
     return periodPrevious.filter(
-      (t) => t.type === "income" || (t.type === "expense" && t.category === dashboardCategory)
+      (t) => t.type === "income" || (t.type === "expense" && dashboardCategories.includes(t.category))
     );
-  }, [periodPrevious, dashboardCategory]);
+  }, [periodPrevious, dashboardCategories]);
 
   const stats = useMemo(() => {
     const calc = (items: Transaction[]) => {
@@ -403,7 +404,7 @@ export default function Home() {
       const key = monthKey(t.date);
       const row = months.get(key) || { expenses: 0, income: 0 };
       if (t.type === "expense") {
-        if (dashboardCategory === "All categories" || t.category === dashboardCategory) {
+        if (dashboardCategories.length === 0 || dashboardCategories.includes(t.category)) {
           row.expenses += t.amountUSD;
         }
       } else {
@@ -412,7 +413,23 @@ export default function Home() {
       months.set(key, row);
     });
     return [...months.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-12);
-  }, [transactions, dashboardCategory]);
+  }, [transactions, dashboardCategories]);
+
+  function toggleDashboardCategory(name: string) {
+    setDashboardCategories((current) =>
+      current.includes(name)
+        ? current.filter((c) => c !== name)
+        : [...current, name]
+    );
+  }
+
+  function clearDashboardCategories() {
+    setDashboardCategories([]);
+  }
+
+  function selectAllDashboardCategories() {
+    setDashboardCategories([...EXPENSE_CATEGORIES]);
+  }
 
   function startEdit(t: Transaction) {
     setEditingId(t.id);
@@ -754,18 +771,47 @@ export default function Home() {
           <div>
             <p className="eyebrow">YOUR FINANCES</p>
             <h1>Dashboard</h1>
-            {dashboardCategory !== "All categories" && <p className="filterContext">Filtered by {dashboardCategory}</p>}
+            {dashboardCategories.length > 0 && (
+              <p className="filterContext">
+                Filtered by {dashboardCategories.join(", ")}
+              </p>
+            )}
           </div>
           <div className="periodControls">
-            <select
-              className="dashboardFilter"
-              value={dashboardCategory}
-              onChange={(e) => setDashboardCategory(e.target.value)}
-              aria-label="Filter dashboard by expense category"
-            >
-              <option>All categories</option>
-              {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-            </select>
+            <div className="multiFilter">
+              <button
+                type="button"
+                className="dashboardFilter multiFilterButton"
+                onClick={() => setCategoryFilterOpen((open) => !open)}
+              >
+                {dashboardCategories.length === 0
+                  ? "All categories"
+                  : dashboardCategories.length === 1
+                    ? dashboardCategories[0]
+                    : `${dashboardCategories.length} categories selected`}
+                <span>▾</span>
+              </button>
+              {categoryFilterOpen && (
+                <div className="multiFilterMenu">
+                  <div className="multiFilterActions">
+                    <button type="button" onClick={clearDashboardCategories}>All categories</button>
+                    <button type="button" onClick={selectAllDashboardCategories}>Select all</button>
+                  </div>
+                  <div className="multiFilterOptions">
+                    {EXPENSE_CATEGORIES.map((c) => (
+                      <label key={c} className="multiFilterOption">
+                        <input
+                          type="checkbox"
+                          checked={dashboardCategories.includes(c)}
+                          onChange={() => toggleDashboardCategory(c)}
+                        />
+                        <span>{c}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
             <button className={view === "month" ? "seg active" : "seg"} onClick={() => setView("month")}>Monthly</button>
             <button className={view === "year" ? "seg active" : "seg"} onClick={() => setView("year")}>Annual</button>
             {view === "month" ? (
@@ -792,7 +838,7 @@ export default function Home() {
               </div>
               <div className="panelHeadActions">
                 <strong>{usd(
-                  dashboardCategory === "All categories"
+                  dashboardCategories.length === 0
                     ? categoryBreakdown.reduce((sum, [, value]) => sum + value, 0)
                     : stats.now.expenses
                 )}</strong>
@@ -802,24 +848,29 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            {(dashboardCategory === "All categories" ? categoryBreakdown : categoryBreakdown.filter(([name]) => name === dashboardCategory)).length === 0 ? (
+            {(dashboardCategories.length === 0
+              ? categoryBreakdown
+              : categoryBreakdown.filter(([name]) => dashboardCategories.includes(name))
+            ).length === 0 ? (
               <EmptyState text="Add your first expense to see the breakdown." />
             ) : spendingView === "pie" ? (
               <div className="pieLayout">
                 <div className="donutWrap">
                   <div className="donut" style={{ background: pieGradient(
-                    dashboardCategory === "All categories"
+                    dashboardCategories.length === 0
                       ? pieCategories
-                      : [{
-                          name: dashboardCategory,
-                          value: stats.now.expenses,
-                          color: PIE_COLORS[0],
-                        }]
+                      : categoryBreakdown
+                          .filter(([name]) => dashboardCategories.includes(name))
+                          .map(([name, value], index) => ({
+                            name,
+                            value,
+                            color: PIE_COLORS[index % PIE_COLORS.length],
+                          }))
                   ) }}>
                     <div className="donutCenter">
                       <span>Expenses</span>
                       <strong>{usd(
-                        dashboardCategory === "All categories"
+                        dashboardCategories.length === 0
                           ? categoryBreakdown.reduce((sum, [, value]) => sum + value, 0)
                           : stats.now.expenses
                       )}</strong>
@@ -827,22 +878,27 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="pieLegend">
-                  {(dashboardCategory === "All categories"
+                  {(dashboardCategories.length === 0
                     ? pieCategories
-                    : [{
-                        name: dashboardCategory,
-                        value: stats.now.expenses,
-                        color: PIE_COLORS[0],
-                      }]
+                    : categoryBreakdown
+                        .filter(([name]) => dashboardCategories.includes(name))
+                        .map(([name, value], index) => ({
+                          name,
+                          value,
+                          color: PIE_COLORS[index % PIE_COLORS.length],
+                        }))
                   ).map((item) => (
                     <div className="pieLegendRow" key={item.name}>
                       <span className="legendSwatch" style={{ background: item.color }} />
                       <div>
                         <strong>{item.name}</strong>
                         <small>{
-                          dashboardCategory === "All categories"
-                            ? pct((item.value / Math.max(categoryBreakdown.reduce((sum, [, value]) => sum + value, 0), 1)) * 100)
-                            : "100.0%"
+                          pct((item.value / Math.max(
+                            dashboardCategories.length === 0
+                              ? categoryBreakdown.reduce((sum, [, value]) => sum + value, 0)
+                              : stats.now.expenses,
+                            1
+                          )) * 100)
                         }</small>
                       </div>
                       <span>{usd(item.value)}</span>
@@ -852,9 +908,9 @@ export default function Home() {
               </div>
             ) : (
               <div className="bars">
-                {(dashboardCategory === "All categories"
+                {(dashboardCategories.length === 0
                   ? categoryBreakdown
-                  : categoryBreakdown.filter(([name]) => name === dashboardCategory)
+                  : categoryBreakdown.filter(([name]) => dashboardCategories.includes(name))
                 ).slice(0, 8).map(([name, value]) => (
                   <div className="barRow" key={name}>
                     <div className="barLabel"><span>{name}</span><strong>{usd(value)}</strong></div>
@@ -958,7 +1014,9 @@ export default function Home() {
               <h2>Expenses by group</h2>
             </div>
             <span className="muted">
-              {dashboardCategory === "All categories" ? "All groups" : dashboardCategory}
+              {dashboardCategories.length === 0
+                ? "All groups"
+                : `${dashboardCategories.length} selected`}
             </span>
           </div>
 
@@ -967,9 +1025,9 @@ export default function Home() {
           ) : (
             <div className="groupSummaryList">
               {groupedExpenseSummary
-                .filter((group) => dashboardCategory === "All categories" || group.name === dashboardCategory)
+                .filter((group) => dashboardCategories.length === 0 || dashboardCategories.includes(group.name))
                 .map((group) => (
-                  <details className="groupSummaryItem" key={group.name} open={dashboardCategory !== "All categories"}>
+                  <details className="groupSummaryItem" key={group.name} open={dashboardCategories.length > 0}>
                     <summary>
                       <div>
                         <strong>{group.name}</strong>
