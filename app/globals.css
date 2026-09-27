@@ -877,34 +877,40 @@ body {
   }
 }
 
-/* BI report layout */
+/* BI report shell */
+.biHidden { display: none !important; }
+.biView { animation: biFadeIn .16s ease; }
+@keyframes biFadeIn {
+  from { opacity: .55; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .reportHeader {
   position: sticky;
   top: 0;
   z-index: 24;
   margin: -10px -8px 14px;
   padding: 10px 8px 10px;
-  background: rgba(244,246,248,.94);
+  background: rgba(244,246,248,.95);
   backdrop-filter: blur(12px);
-  border-bottom: 1px solid rgba(223,229,232,.85);
+  border-bottom: 1px solid rgba(223,229,232,.9);
 }
-.reportHeader .topbar {
-  margin-bottom: 10px;
-}
+.reportHeader .topbar { margin-bottom: 9px; }
+
 .dashboardTabs {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px;
-  background: #e9edef;
-  border-radius: 12px;
+  gap: 5px;
   width: fit-content;
   max-width: 100%;
+  padding: 4px;
+  border-radius: 11px;
+  background: #e8edef;
 }
 .dashboardTab,
 .clearFiltersButton {
   border: 0;
-  border-radius: 9px;
+  border-radius: 8px;
   padding: 8px 12px;
   background: transparent;
   color: var(--muted);
@@ -920,8 +926,17 @@ body {
 }
 .clearFiltersButton {
   color: var(--accent);
-  margin-left: 4px;
+  margin-left: 3px;
 }
+
+.navButton {
+  width: 100%;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
 .pieLegendButton {
   width: 100%;
   border: 0;
@@ -929,14 +944,10 @@ body {
   text-align: left;
   cursor: pointer;
 }
-.pieLegendButton:hover {
-  background: #f7f9fa;
-}
-.biDetailPanel {
-  min-height: 0;
-}
+.pieLegendButton:hover { background: #f7f9fa; }
+
 .biTableWrap {
-  max-height: 430px;
+  max-height: 440px;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -957,18 +968,23 @@ body {
   font-weight: 800;
   white-space: nowrap;
 }
+
+/* Compact the report area on desktop */
 @media (min-width: 1100px) {
+  .content { max-width: 1600px; }
   .metrics {
-    position: sticky;
-    top: 126px;
-    z-index: 10;
-    padding: 4px 0 10px;
-    background: var(--bg);
+    gap: 10px;
+    margin-bottom: 10px;
   }
-  .trendChart {
-    height: 180px;
-  }
+  .metricCard { padding: 16px 18px; }
+  .metricCard strong { font-size: 24px; margin: 7px 0 5px; }
+  .gridTwo { gap: 10px; margin-bottom: 10px; }
+  .panel { padding: 18px; margin-bottom: 10px; }
+  .trendChart { height: 180px; }
+  .donut { width: 185px; }
+  .savingsDonut, .smallDonut { width: 160px; }
 }
+
 @media (max-width: 1000px) {
   .reportHeader {
     position: static;
@@ -976,7 +992,7 @@ body {
     padding: 0;
     background: transparent;
     backdrop-filter: none;
-    border-bottom: 0;
+    border: 0;
   }
   .dashboardTabs {
     width: 100%;
