@@ -1058,3 +1058,150 @@ body {
     height: 52px;
   }
 }
+
+/* Refined Finance By Franco identity */
+.brandLockup {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.markFrame {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+.francoMark {
+  width: 68px;
+  height: 72px;
+  overflow: visible;
+}
+.francoMark path {
+  fill: none;
+  stroke: #2f67d8;
+  stroke-width: 4.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.brandText {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.brandText strong {
+  display: grid;
+  gap: 0;
+  font-size: 22px;
+  line-height: 1.02;
+  letter-spacing: -.7px;
+  color: #17202a;
+}
+.brandFinance,
+.brandByFranco {
+  display: block;
+}
+.brandByFranco {
+  font-weight: 700;
+}
+.brandTagline {
+  display: block;
+  color: #778791;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .9px;
+}
+
+/* Sidebar lockup: high contrast and deliberate scale */
+.sidebar {
+  padding: 30px 22px;
+}
+.sidebar .brandLockup.compact {
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 20px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.sidebar .brandLockup.compact .francoMark {
+  width: 56px;
+  height: 60px;
+}
+.sidebar .brandText {
+  gap: 4px;
+}
+.sidebar .brandText strong {
+  font-size: 18px;
+  line-height: .98;
+  letter-spacing: -.45px;
+  color: #f5f8fa;
+}
+.sidebar .brandFinance {
+  font-weight: 700;
+}
+.sidebar .brandByFranco {
+  color: #dce5ea;
+  font-weight: 500;
+}
+.sidebar .brandTagline {
+  color: #7f96a2;
+  font-size: 8px;
+  letter-spacing: 1.15px;
+}
+.sidebar nav {
+  margin-top: 24px;
+}
+
+/* Login identity: centered, premium and spacious */
+.authCard {
+  padding: 38px 36px;
+}
+.authCard .brandLockup {
+  justify-content: center;
+  gap: 15px;
+  margin-bottom: 26px;
+}
+.authCard .francoMark {
+  width: 72px;
+  height: 78px;
+}
+.authCard .brandText {
+  text-align: left;
+}
+.authCard .brandText strong {
+  font-size: 25px;
+  line-height: 1;
+}
+.authCard .brandTagline {
+  margin-top: 2px;
+  font-size: 9px;
+  letter-spacing: 1.1px;
+  text-transform: uppercase;
+}
+.authCard > .eyebrow {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 900px) {
+  .sidebar .brandLockup.compact .francoMark {
+    width: 44px;
+    height: 48px;
+  }
+  .sidebar .brandText strong {
+    font-size: 15px;
+  }
+  .sidebar .brandTagline {
+    display: none;
+  }
+}
+@media (max-width: 650px) {
+  .sidebar .brandLockup.compact {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .authCard .brandLockup {
+    flex-direction: column;
+    text-align: center;
+  }
+  .authCard .brandText {
+    text-align: center;
+  }
+}
