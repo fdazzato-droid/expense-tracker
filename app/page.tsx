@@ -137,6 +137,7 @@ export default function Home() {
   const [fxRate, setFxRate] = useState("40");
   const [paymentMethod, setPaymentMethod] = useState("Card");
   const [notes, setNotes] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [repeatMonthly, setRepeatMonthly] = useState(false);
   const [repeatDay, setRepeatDay] = useState("1");
   const [repeatEndDate, setRepeatEndDate] = useState("");
@@ -372,6 +373,39 @@ export default function Home() {
     return [...months.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-12);
   }, [transactions]);
 
+  function startEdit(t: Transaction) {
+    setEditingId(t.id);
+    setType(t.type);
+    setExpenseKind(t.expenseKind ?? "variable");
+    setDate(t.date);
+    setCategory(t.type === "income" ? "Groceries" : t.category);
+    setAmount(String(t.amountOriginal));
+    setCurrency(t.currency);
+    setFxRate(String(t.currency === "USD" ? 1 : t.fxRate));
+    setPaymentMethod(t.paymentMethod ?? "Card");
+    setNotes(t.notes ?? "");
+    setRepeatMonthly(false);
+    setRepeatDay("1");
+    setRepeatEndDate("");
+    window.location.hash = "add";
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setType("expense");
+    setExpenseKind("variable");
+    setDate(todayISO());
+    setCategory("Groceries");
+    setAmount("");
+    setCurrency("UYU");
+    setFxRate("40");
+    setPaymentMethod("Card");
+    setNotes("");
+    setRepeatMonthly(false);
+    setRepeatDay("1");
+    setRepeatEndDate("");
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     const numericAmount = Number(amount);
@@ -383,6 +417,33 @@ export default function Home() {
     const amountUSD = currency === "USD" ? numericAmount : numericAmount / numericFx;
 
     if (!user || !isAllowedEmail(user.email)) return;
+
+    if (editingId) {
+      const { error } = await supabase
+        .from("transactions")
+        .update({
+          date,
+          type,
+          expense_kind: type === "expense" ? expenseKind : null,
+          category: type === "income" ? "Income" : category,
+          amount_original: numericAmount,
+          currency,
+          fx_rate: currency === "USD" ? 1 : numericFx,
+          amount_usd: Number(amountUSD.toFixed(2)),
+          payment_method: type === "expense" ? paymentMethod : null,
+          notes: notes.trim() || null,
+        })
+        .eq("id", editingId);
+
+      if (error) {
+        setAuthMessage(error.message);
+        return;
+      }
+
+      cancelEdit();
+      await loadTransactions();
+      return;
+    }
 
     let recurringId: string | null = null;
 
@@ -745,7 +806,7 @@ export default function Home() {
           <div className="panelHead">
             <div>
               <p className="eyebrow">QUICK ENTRY</p>
-              <h2>Add movement</h2>
+              <h2>{editingId ? "Edit movement" : "Add movement"}</h2>
             </div>
           </div>
 
@@ -810,7 +871,7 @@ export default function Home() {
               </label>
             )}
 
-            <label className="wide recurringToggle">
+            {!editingId && <label className="wide recurringToggle">
               <span>Recurring</span>
               <span className="checkLine">
                 <input
@@ -820,9 +881,9 @@ export default function Home() {
                 />
                 Repeat every month
               </span>
-            </label>
+            </label>}
 
-            {repeatMonthly && (
+            {!editingId && repeatMonthly && (
               <>
                 <label>
                   Day of month
@@ -858,7 +919,8 @@ export default function Home() {
                   ? `≈ ${usd(Number(amount) / Number(fxRate))}`
                   : currency === "USD" && amount ? usd(Number(amount)) : ""}
               </div>
-              <button className="primary" type="submit">Save movement</button>
+              {editingId && <button className="ghost" type="button" onClick={cancelEdit}>Cancel</button>}
+              <button className="primary" type="submit">{editingId ? "Save changes" : "Save movement"}</button>
             </div>
           </form>
         </section>
@@ -946,7 +1008,12 @@ export default function Home() {
                       <td>{t.category}</td>
                       <td>{new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(t.amountOriginal)} {t.currency}</td>
                       <td><strong>{usd(t.amountUSD)}</strong></td>
-                      <td><button className="ghost danger" onClick={() => removeTransaction(t.id)}>Delete</button></td>
+                      <td>
+                        <div className="rowActions">
+                          <button className="ghost" onClick={() => startEdit(t)}>Edit</button>
+                          <button className="ghost danger" onClick={() => removeTransaction(t.id)}>Delete</button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
