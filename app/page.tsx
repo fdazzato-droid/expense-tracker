@@ -132,6 +132,7 @@ export default function Home() {
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
   const [selectedYear, setSelectedYear] = useState(todayISO().slice(0, 4));
   const [spendingView, setSpendingView] = useState<"bars" | "pie">("pie");
+  const [dashboardTab, setDashboardTab] = useState<"overview" | "commitments" | "details">("overview");
   const [dashboardCategories, setDashboardCategories] = useState<string[]>([]);
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
   const [dashboardCommitments, setDashboardCommitments] = useState<string[]>([]);
@@ -572,6 +573,12 @@ export default function Home() {
     setDashboardCommitments((current) =>
       current.length === 1 && current[0] === name ? [] : [name]
     );
+    setDashboardTab("commitments");
+  }
+
+  function clearAllDashboardFilters() {
+    setDashboardCategories([]);
+    setDashboardCommitments([]);
   }
 
   function toggleDashboardCommitment(name: string) {
@@ -926,6 +933,7 @@ export default function Home() {
       </aside>
 
       <section className="content">
+        <div className="reportHeader">
         <header className="topbar">
           <div>
             <p className="eyebrow">YOUR FINANCES</p>
@@ -1020,6 +1028,36 @@ export default function Home() {
           </div>
         </header>
 
+        <div className="dashboardTabs" role="tablist" aria-label="Dashboard views">
+          <button
+            type="button"
+            className={dashboardTab === "overview" ? "dashboardTab active" : "dashboardTab"}
+            onClick={() => setDashboardTab("overview")}
+          >
+            Overview
+          </button>
+          <button
+            type="button"
+            className={dashboardTab === "commitments" ? "dashboardTab active" : "dashboardTab"}
+            onClick={() => setDashboardTab("commitments")}
+          >
+            Commitments
+          </button>
+          <button
+            type="button"
+            className={dashboardTab === "details" ? "dashboardTab active" : "dashboardTab"}
+            onClick={() => setDashboardTab("details")}
+          >
+            Details
+          </button>
+          {(dashboardCategories.length > 0 || dashboardCommitments.length > 0) && (
+            <button type="button" className="clearFiltersButton" onClick={clearAllDashboardFilters}>
+              Clear filters
+            </button>
+          )}
+        </div>
+        </div>
+
         <section id="dashboard" className="metrics">
           <MetricCard label="Income" value={usd(stats.now.income)} sub="Total income in USD" />
           <MetricCard label="Expenses" value={usd(stats.now.expenses)} sub={stats.prev.expenses > 0 ? `${expenseChange >= 0 ? "+" : ""}${expenseChange.toFixed(1)}% vs previous period` : "No previous period data"} />
@@ -1027,6 +1065,8 @@ export default function Home() {
           <MetricCard label="Savings rate" value={pct(stats.now.savingsRate)} sub="Share of income saved" />
         </section>
 
+        {dashboardTab === "overview" && (
+          <>
         <section className="gridTwo">
           <div className="panel visualPanel">
             <div className="panelHead">
@@ -1086,7 +1126,17 @@ export default function Home() {
                           color: PIE_COLORS[index % PIE_COLORS.length],
                         }))
                   ).map((item) => (
-                    <div className="pieLegendRow" key={item.name}>
+                    <button
+                      type="button"
+                      className="pieLegendRow pieLegendButton"
+                      key={item.name}
+                      onClick={() => {
+                        if (EXPENSE_CATEGORIES.includes(item.name)) {
+                          setDashboardCategories([item.name]);
+                          setDashboardTab("details");
+                        }
+                      }}
+                    >
                       <span className="legendSwatch" style={{ background: item.color }} />
                       <div>
                         <strong>{item.name}</strong>
@@ -1100,7 +1150,7 @@ export default function Home() {
                         }</small>
                       </div>
                       <span>{usd(item.value)}</span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1143,6 +1193,11 @@ export default function Home() {
             </div>
           </div>
         </section>
+
+        {dashboardTab === "overview" && (
+          <>
+          </>
+        )}
 
         <section className="gridTwo insightGrid">
           <div className="panel visualPanel">
@@ -1208,6 +1263,11 @@ export default function Home() {
             )}
           </div>
         </section>
+
+        {dashboardTab === "commitments" && (
+          <>
+          </>
+        )}
 
         <section className="panel commitmentDetailsPanel">
           <div className="panelHead">
@@ -1279,6 +1339,11 @@ export default function Home() {
           </div>
         </section>
 
+        {dashboardTab === "commitments" && (
+          <>
+          </>
+        )}
+
         <section className="panel installmentPanel">
           <div className="panelHead">
             <div>
@@ -1320,6 +1385,61 @@ export default function Home() {
             </div>
           )}
         </section>
+
+        {dashboardTab === "details" && (
+          <>
+        <section className="panel biDetailPanel">
+          <div className="panelHead">
+            <div>
+              <p className="eyebrow">TRANSACTION DETAIL</p>
+              <h2>Expense detail</h2>
+            </div>
+            <span className="muted">
+              {current.filter((t) => t.type === "expense").length} visible
+            </span>
+          </div>
+
+          {current.filter((t) => t.type === "expense").length === 0 ? (
+            <EmptyState text="No expenses match the current filters." />
+          ) : (
+            <div className="tableWrap biTableWrap">
+              <table className="biTable">
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th>Group</th>
+                    <th>Commitment</th>
+                    <th>Date</th>
+                    <th>USD</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {current
+                    .filter((t) => t.type === "expense")
+                    .map((t) => (
+                      <tr key={t.id}>
+                        <td><strong>{t.description}</strong></td>
+                        <td>{t.category}</td>
+                        <td><span className="commitmentBadge">{commitmentTypeForTransaction(t)}</span></td>
+                        <td>{t.date}</td>
+                        <td><strong>{usd(t.amountUSD)}</strong></td>
+                        <td><button className="ghost" onClick={() => startEdit(t)}>Edit</button></td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        {dashboardTab === "overview" && (
+          <>
+          </>
+        )}
+
+          </>
+        )}
 
         <section className="panel categorySummaryPanel">
           <div className="panelHead">
@@ -1389,6 +1509,9 @@ export default function Home() {
           )}
           <div className="legend"><span><i className="dot income" />Income</span><span><i className="dot expense" />Expenses</span></div>
         </section>
+
+          </>
+        )}
 
         <section id="add" className="panel addPanel">
           <div className="panelHead">
