@@ -60,10 +60,10 @@ function pieGradient(items: { value: number; color: string }[]) {
   }).join(", ")})`;
 }
 
-const ALLOWED_EMAILS = ["fdazzato@gmail.com", "mmazzatopaz@gmail.com"] as const;
+const OWNER_EMAIL = "fdazzato@gmail.com";
 
 function isAllowedEmail(email?: string | null) {
-  return !!email && ALLOWED_EMAILS.includes(email.toLowerCase() as (typeof ALLOWED_EMAILS)[number]);
+  return !!email && email.toLowerCase() === OWNER_EMAIL;
 }
 const supabase = createClient(
   "https://ltxnpfnuifltxdfcaoni.supabase.co",
@@ -101,10 +101,9 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMessage, setAuthMessage] = useState("");
-  const [email, setEmail] = useState("fdazzato@gmail.com");
+  const [email] = useState(OWNER_EMAIL);
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [creatingAccount, setCreatingAccount] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(false);
   const [view, setView] = useState<"month" | "year">("month");
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
@@ -220,35 +219,6 @@ export default function Home() {
         ? error.message
         : "Te envié un email para crear o restablecer tu contraseña."
     );
-  }
-
-  async function createAccount(e?: FormEvent) {
-    e?.preventDefault();
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!isAllowedEmail(normalizedEmail)) {
-      setAuthMessage("Este email no está habilitado para Money Lens.");
-      return;
-    }
-    if (password.length < 8) {
-      setAuthMessage("Usá una contraseña de al menos 8 caracteres.");
-      return;
-    }
-    setAuthMessage("Creando cuenta...");
-    const { data, error } = await supabase.auth.signUp({
-      email: normalizedEmail,
-      password,
-      options: { emailRedirectTo: window.location.origin },
-    });
-    if (error) {
-      setAuthMessage(error.message);
-      return;
-    }
-    if (data.session) {
-      setAuthMessage("Cuenta creada. Ya podés usar Money Lens.");
-    } else {
-      setAuthMessage("Cuenta creada. Revisá tu email para confirmar el acceso.");
-    }
-    setCreatingAccount(false);
   }
 
   async function saveNewPassword(e?: FormEvent) {
@@ -435,44 +405,26 @@ export default function Home() {
   if (!user || !isAllowedEmail(user.email)) {
     return (
       <main className="authShell">
-        <form className="authCard" onSubmit={creatingAccount ? createAccount : signInWithPassword}>
+        <form className="authCard" onSubmit={signInWithPassword}>
           <p className="eyebrow">PRIVATE ACCESS</p>
           <h1>Money Lens</h1>
-          <p>Acceso habilitado únicamente para usuarios autorizados.</p>
-          <input
-            className="authInput"
-            type="email"
-            autoComplete="username"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+          <p>Acceso exclusivo para <strong>{OWNER_EMAIL}</strong>.</p>
           <input
             className="authInput"
             type="password"
-            autoComplete={creatingAccount ? "new-password" : "current-password"}
+            autoComplete="current-password"
             minLength={8}
-            placeholder={creatingAccount ? "Elegí una contraseña" : "Contraseña"}
+            placeholder="Contraseña"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          <button className="primary authButton" type="submit">{creatingAccount ? "Crear cuenta" : "Entrar"}</button>
-          <button
-            className="secondaryAuthButton"
-            type="button"
-            onClick={() => { setCreatingAccount((v) => !v); setAuthMessage(""); }}
-          >
-            {creatingAccount ? "Ya tengo cuenta" : "Crear cuenta nueva"}
+          <button className="primary authButton" type="submit">Entrar</button>
+          <button className="secondaryAuthButton" type="button" onClick={sendPasswordSetupLink}>
+            Restablecer contraseña
           </button>
-          {!creatingAccount && (
-            <button className="secondaryAuthButton" type="button" onClick={sendPasswordSetupLink}>
-              Restablecer contraseña
-            </button>
-          )}
           {authMessage && <p className="authMessage">{authMessage}</p>}
-          <p className="authHint">Cada usuario tiene sus propios movimientos. Los datos nunca se mezclan entre cuentas.</p>
+          <p className="authHint">Esta app está restringida a tu cuenta.</p>
         </form>
       </main>
     );
