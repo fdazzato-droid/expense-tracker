@@ -437,3 +437,16 @@ body {
     flex-wrap: wrap;
   }
 }
+
+.movementDescription {
+  display: grid;
+  gap: 3px;
+}
+.movementDescription strong {
+  font-size: 13px;
+  color: var(--ink);
+}
+.movementDescription small {
+  font-size: 10px;
+  color: var(--muted);
+}
