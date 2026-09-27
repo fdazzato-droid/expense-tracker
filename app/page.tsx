@@ -1763,15 +1763,20 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub: 
 function FinanceByFrancoLogo({ compact = false }: { compact?: boolean }) {
   return (
     <div className={compact ? "brandLockup compact" : "brandLockup"}>
-      <svg className="francoMark" viewBox="0 0 160 170" aria-hidden="true">
-        <path d="M30 48 L130 50" />
-        <path d="M30 48 L111 96" />
-        <path d="M82 50 L84 156" />
-        <path d="M84 112 L111 96" />
-      </svg>
+      <div className="markFrame">
+        <svg className="francoMark" viewBox="0 0 160 170" aria-hidden="true">
+          <path d="M30 48 L130 50" />
+          <path d="M30 48 L111 96" />
+          <path d="M82 50 L84 156" />
+          <path d="M84 112 L111 96" />
+        </svg>
+      </div>
       <div className="brandText">
-        <strong>Finance By Franco</strong>
-        {!compact && <span>Personal finance intelligence</span>}
+        <strong>
+          <span className="brandFinance">Finance</span>
+          <span className="brandByFranco">By Franco</span>
+        </strong>
+        <span className="brandTagline">{compact ? "PERSONAL FINANCE" : "Personal Finance Dashboard"}</span>
       </div>
     </div>
   );
