@@ -761,3 +761,118 @@ body {
     width: 100%;
   }
 }
+
+.commitmentQuickCards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.commitmentQuickCard {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: #f7f9fa;
+  border-radius: 12px;
+  padding: 14px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.commitmentQuickCard.active {
+  border-color: #8fb7ae;
+  background: #eef7f5;
+  box-shadow: 0 0 0 2px rgba(20,108,91,.06);
+}
+.commitmentQuickCard span,
+.commitmentQuickCard small {
+  display: block;
+  color: var(--muted);
+}
+.commitmentQuickCard span {
+  font-size: 11px;
+  font-weight: 800;
+}
+.commitmentQuickCard strong {
+  display: block;
+  font-size: 18px;
+  margin: 7px 0 5px;
+}
+.commitmentQuickCard small {
+  font-size: 10px;
+}
+.commitmentDetailGroups {
+  display: grid;
+  gap: 10px;
+}
+.commitmentDetailGroup {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+.commitmentDetailGroup summary {
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 13px 15px;
+  cursor: pointer;
+  background: #fbfcfc;
+}
+.commitmentDetailGroup summary::-webkit-details-marker { display: none; }
+.commitmentDetailGroup summary > div {
+  display: grid;
+  gap: 2px;
+}
+.commitmentDetailGroup summary > div strong {
+  font-size: 13px;
+}
+.commitmentDetailGroup summary > div span {
+  font-size: 10px;
+  color: var(--muted);
+}
+.commitmentDetailGroup summary > strong {
+  font-size: 13px;
+}
+.commitmentMovementList {
+  border-top: 1px solid var(--line);
+  padding: 2px 15px 7px;
+}
+.commitmentMovementRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eef1f3;
+}
+.commitmentMovementRow:last-child { border-bottom: 0; }
+.commitmentMovementRow > div {
+  display: grid;
+  gap: 3px;
+}
+.commitmentMovementRow > div strong {
+  font-size: 12px;
+}
+.commitmentMovementRow small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.commitmentMovementRow > span {
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.commitmentEmpty {
+  padding: 15px;
+  color: var(--muted);
+  font-size: 12px;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 650px) {
+  .commitmentQuickCards {
+    grid-template-columns: 1fr;
+  }
+  .commitmentMovementRow {
+    align-items: flex-start;
+  }
+}
