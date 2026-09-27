@@ -253,7 +253,7 @@ export default function Home() {
     setAuthMessage("Ingresando...");
     const normalizedEmail = email.trim().toLowerCase();
     if (!isAllowedEmail(normalizedEmail)) {
-      setAuthMessage("Este email no está habilitado para Money Lens.");
+      setAuthMessage("Este email no está habilitado para Finance By Franco.");
       return;
     }
     const { error } = await supabase.auth.signInWithPassword({
@@ -271,7 +271,7 @@ export default function Home() {
   async function sendPasswordSetupLink() {
     const normalizedEmail = email.trim().toLowerCase();
     if (!isAllowedEmail(normalizedEmail)) {
-      setAuthMessage("Este email no está habilitado para Money Lens.");
+      setAuthMessage("Este email no está habilitado para Finance By Franco.");
       return;
     }
     setAuthMessage("Enviando email...");
@@ -859,13 +859,14 @@ export default function Home() {
   const maxTrend = Math.max(...monthlyTrend.flatMap(([, v]) => [v.expenses, v.income]), 1);
 
   if (authLoading) {
-    return <main className="authShell"><div className="authCard"><h1>Money Lens</h1><p>Verificando acceso...</p></div></main>;
+    return <main className="authShell"><div className="authCard"><FinanceByFrancoLogo /><p>Verificando acceso...</p></div></main>;
   }
 
   if (recoveryMode && isAllowedEmail(user?.email)) {
     return (
       <main className="authShell">
         <form className="authCard" onSubmit={saveNewPassword}>
+          <FinanceByFrancoLogo />
           <p className="eyebrow">PRIVATE ACCESS</p>
           <h1>Crear contraseña</h1>
           <p>Elegí una contraseña nueva para <strong>{user?.email}</strong>.</p>
@@ -890,8 +891,8 @@ export default function Home() {
     return (
       <main className="authShell">
         <form className="authCard" onSubmit={signInWithPassword}>
+          <FinanceByFrancoLogo />
           <p className="eyebrow">PRIVATE ACCESS</p>
-          <h1>Money Lens</h1>
           <p>Acceso exclusivo para <strong>{OWNER_EMAIL}</strong>.</p>
           <input
             className="authInput"
@@ -918,8 +919,7 @@ export default function Home() {
     <main className="shell">
       <aside className="sidebar">
         <div>
-          <div className="brand">Money Lens</div>
-          <p className="muted">Personal finance dashboard</p>
+          <FinanceByFrancoLogo compact />
         </div>
         <nav>
           <button className={dashboardTab === "overview" ? "navItem navButton active" : "navItem navButton"} onClick={() => setDashboardTab("overview")}>Overview</button>
@@ -1756,6 +1756,23 @@ function MetricCard({ label, value, sub }: { label: string; value: string; sub: 
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{sub}</small>
+    </div>
+  );
+}
+
+function FinanceByFrancoLogo({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={compact ? "brandLockup compact" : "brandLockup"}>
+      <svg className="francoMark" viewBox="0 0 160 170" aria-hidden="true">
+        <path d="M30 48 L130 50" />
+        <path d="M30 48 L111 96" />
+        <path d="M82 50 L84 156" />
+        <path d="M84 112 L111 96" />
+      </svg>
+      <div className="brandText">
+        <strong>Finance By Franco</strong>
+        {!compact && <span>Personal finance intelligence</span>}
+      </div>
     </div>
   );
 }
