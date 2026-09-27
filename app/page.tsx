@@ -10,6 +10,7 @@ type RecurringTransaction = {
   userId: string;
   type: EntryType;
   category: string;
+  description: string;
   amountOriginal: number;
   currency: Currency;
   fxRate: number;
@@ -26,6 +27,7 @@ type Transaction = {
   date: string;
   type: EntryType;
   category: string;
+  description: string;
   amountOriginal: number;
   currency: Currency;
   fxRate: number;
@@ -128,6 +130,7 @@ export default function Home() {
   const [type, setType] = useState<EntryType>("expense");
   const [date, setDate] = useState(todayISO());
   const [category, setCategory] = useState("Groceries");
+  const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [currency, setCurrency] = useState<Currency>("UYU");
   const [fxRate, setFxRate] = useState("40");
@@ -194,6 +197,7 @@ export default function Home() {
       date: row.date,
       type: row.type,
       category: row.category,
+      description: row.description ?? row.category,
       amountOriginal: Number(row.amount_original),
       currency: row.currency,
       fxRate: Number(row.fx_rate),
@@ -219,6 +223,7 @@ export default function Home() {
       userId: row.user_id,
       type: row.type,
       category: row.category,
+      description: row.description ?? row.category,
       amountOriginal: Number(row.amount_original),
       currency: row.currency,
       fxRate: Number(row.fx_rate),
@@ -374,6 +379,7 @@ export default function Home() {
     setType(t.type);
     setDate(t.date);
     setCategory(t.type === "income" ? "Groceries" : t.category);
+    setDescription(t.description ?? "");
     setAmount(String(t.amountOriginal));
     setCurrency(t.currency);
     setFxRate(String(t.currency === "USD" ? 1 : t.fxRate));
@@ -397,6 +403,7 @@ export default function Home() {
     setType("expense");
     setDate(todayISO());
     setCategory("Groceries");
+    setDescription("");
     setAmount("");
     setCurrency("UYU");
     setFxRate("40");
@@ -412,6 +419,10 @@ export default function Home() {
     const numericAmount = Number(amount);
     const numericFx = Number(fxRate);
 
+    if (!description.trim()) {
+      setAuthMessage("Agregá una descripción para identificar este movimiento.");
+      return;
+    }
     if (!numericAmount || numericAmount <= 0) return;
     if (currency === "UYU" && (!numericFx || numericFx <= 0)) return;
 
@@ -430,6 +441,7 @@ export default function Home() {
               type,
               expense_kind: null,
               category: type === "income" ? "Income" : category,
+              description: description.trim(),
               amount_original: numericAmount,
               currency,
               fx_rate: currency === "USD" ? 1 : numericFx,
@@ -453,6 +465,7 @@ export default function Home() {
               type,
               expense_kind: null,
               category: type === "income" ? "Income" : category,
+              description: description.trim(),
               amount_original: numericAmount,
               currency,
               fx_rate: currency === "USD" ? 1 : numericFx,
@@ -492,6 +505,7 @@ export default function Home() {
           type,
           expense_kind: null,
           category: type === "income" ? "Income" : category,
+          description: description.trim(),
           amount_original: numericAmount,
           currency,
           fx_rate: currency === "USD" ? 1 : numericFx,
@@ -522,6 +536,7 @@ export default function Home() {
           type,
           expense_kind: null,
           category: type === "income" ? "Income" : category,
+          description: description.trim(),
           amount_original: numericAmount,
           currency,
           fx_rate: currency === "USD" ? 1 : numericFx,
@@ -548,6 +563,7 @@ export default function Home() {
       type,
       expense_kind: null,
       category: type === "income" ? "Income" : category,
+      description: description.trim(),
       amount_original: numericAmount,
       currency,
       fx_rate: currency === "USD" ? 1 : numericFx,
@@ -563,6 +579,7 @@ export default function Home() {
     }
 
     setAmount("");
+    setDescription("");
     setNotes("");
     setRepeatMonthly(false);
     setRepeatDay("1");
@@ -891,6 +908,16 @@ export default function Home() {
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
             </label>
 
+            <label className="wide">
+              Description
+              <input
+                placeholder={type === "expense" ? "e.g. Supermarket, car insurance..." : "e.g. September salary, freelance payment..."}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                required
+              />
+            </label>
+
             {type === "expense" && (
               <label>
                 Category
@@ -999,8 +1026,8 @@ export default function Home() {
               {recurringTransactions.map((r) => (
                 <div className="recurringItem" key={r.id}>
                   <div>
-                    <strong>{r.category}</strong>
-                    <span>{usd(r.currency === "USD" ? r.amountOriginal : r.amountOriginal / r.fxRate)} · day {r.dayOfMonth} each month</span>
+                    <strong>{r.description}</strong>
+                    <span>{r.category} · {usd(r.currency === "USD" ? r.amountOriginal : r.amountOriginal / r.fxRate)} · day {r.dayOfMonth} each month</span>
                     <small>
                       Starts {r.startDate}
                       {r.endDate ? ` · ends ${r.endDate}` : " · no end date"}
@@ -1056,14 +1083,19 @@ export default function Home() {
             <div className="tableWrap">
               <table>
                 <thead>
-                  <tr><th>Date</th><th>Type</th><th>Category</th><th>Original</th><th>USD</th><th></th></tr>
+                  <tr><th>Date</th><th>Type</th><th>Description</th><th>Original</th><th>USD</th><th></th></tr>
                 </thead>
                 <tbody>
                   {transactions.slice(0, 30).map((t) => (
                     <tr key={t.id}>
                       <td>{t.date}</td>
                       <td><span className={`badge ${t.type}`}>{t.type}</span></td>
-                      <td>{t.category}</td>
+                      <td>
+                        <div className="movementDescription">
+                          <strong>{t.description}</strong>
+                          <small>{t.category}</small>
+                        </div>
+                      </td>
                       <td>{new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(t.amountOriginal)} {t.currency}</td>
                       <td><strong>{usd(t.amountUSD)}</strong></td>
                       <td>
