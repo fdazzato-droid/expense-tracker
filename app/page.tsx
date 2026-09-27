@@ -112,6 +112,12 @@ function pct(value: number) {
   return `${value.toFixed(1)}%`;
 }
 
+function inclusiveMonthCount(startDate: string, endDate: string) {
+  const [sy, sm] = startDate.slice(0, 7).split("-").map(Number);
+  const [ey, em] = endDate.slice(0, 7).split("-").map(Number);
+  return Math.max(0, (ey - sy) * 12 + (em - sm) + 1);
+}
+
 export default function Home() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
@@ -388,15 +394,73 @@ export default function Home() {
     ].filter((item) => item.value > 0);
   }, [stats.now.income, stats.now.expenses, stats.now.savings]);
 
-  const recurringVsOneOff = useMemo(() => {
-    const recurring = current
-      .filter((t) => t.type === "expense" && Boolean(t.recurringId))
-      .reduce((s, t) => s + t.amountUSD, 0);
-    const oneOff = current
-      .filter((t) => t.type === "expense" && !t.recurringId)
-      .reduce((s, t) => s + t.amountUSD, 0);
-    return { recurring, oneOff };
-  }, [current]);
+  const recurringById = useMemo(() => {
+    return new Map(recurringTransactions.map((r) => [r.id, r]));
+  }, [recurringTransactions]);
+
+  const spendingCommitments = useMemo(() => {
+    let oneOff = 0;
+    let recurringOngoing = 0;
+    let installments = 0;
+
+    current
+      .filter((t) => t.type === "expense")
+      .forEach((t) => {
+        if (!t.recurringId) {
+          oneOff += t.amountUSD;
+          return;
+        }
+
+        const recurring = recurringById.get(t.recurringId);
+        if (recurring?.endDate) installments += t.amountUSD;
+        else recurringOngoing += t.amountUSD;
+      });
+
+    return { oneOff, recurringOngoing, installments };
+  }, [current, recurringById]);
+
+  const installmentSummary = useMemo(() => {
+    const today = todayISO();
+
+    return recurringTransactions
+      .filter((r) =>
+        r.type === "expense" &&
+        Boolean(r.endDate) &&
+        (dashboardCategories.length === 0 || dashboardCategories.includes(r.category))
+      )
+      .map((r) => {
+        const endDate = r.endDate!;
+        const totalInstallments = inclusiveMonthCount(r.startDate, endDate);
+        const paidMonths = new Set(
+          transactions
+            .filter((t) =>
+              t.type === "expense" &&
+              t.recurringId === r.id &&
+              t.date <= today &&
+              t.date <= endDate
+            )
+            .map((t) => monthKey(t.date))
+        );
+        const paidInstallments = Math.min(totalInstallments, paidMonths.size);
+        const remainingInstallments = Math.max(totalInstallments - paidInstallments, 0);
+        const monthlyUSD = r.currency === "USD" ? r.amountOriginal : r.amountOriginal / r.fxRate;
+
+        return {
+          ...r,
+          totalInstallments,
+          paidInstallments,
+          remainingInstallments,
+          monthlyUSD,
+          remainingUSD: remainingInstallments * monthlyUSD,
+        };
+      })
+      .sort((a, b) => a.endDate!.localeCompare(b.endDate!));
+  }, [recurringTransactions, transactions, dashboardCategories]);
+
+  const totalInstallmentBalance = useMemo(
+    () => installmentSummary.reduce((sum, item) => sum + item.remainingUSD, 0),
+    [installmentSummary]
+  );
 
   const monthlyTrend = useMemo(() => {
     const months = new Map<string, { expenses: number; income: number }>();
@@ -923,22 +987,24 @@ export default function Home() {
 
           <div className="panel">
             <p className="eyebrow">SPENDING STRUCTURE</p>
-            <h2>Recurring vs one-off</h2>
-            <div className="splitNumbers">
-              <div><span>Recurring</span><strong>{usd(recurringVsOneOff.recurring)}</strong></div>
-              <div><span>One-off</span><strong>{usd(recurringVsOneOff.oneOff)}</strong></div>
+            <h2>Spending commitments</h2>
+            <div className="commitmentNumbers">
+              <div><span>One-off</span><strong>{usd(spendingCommitments.oneOff)}</strong></div>
+              <div><span>Recurring ongoing</span><strong>{usd(spendingCommitments.recurringOngoing)}</strong></div>
+              <div><span>Installments</span><strong>{usd(spendingCommitments.installments)}</strong></div>
             </div>
-            <div className="stacked">
-              <div style={{ width: `${stats.now.expenses ? (recurringVsOneOff.recurring / stats.now.expenses) * 100 : 0}%` }} />
-              <div style={{ width: `${stats.now.expenses ? (recurringVsOneOff.oneOff / stats.now.expenses) * 100 : 0}%` }} />
+            <div className="stacked commitmentStack">
+              <div style={{ width: `${stats.now.expenses ? (spendingCommitments.recurringOngoing / stats.now.expenses) * 100 : 0}%` }} />
+              <div style={{ width: `${stats.now.expenses ? (spendingCommitments.installments / stats.now.expenses) * 100 : 0}%` }} />
+              <div style={{ width: `${stats.now.expenses ? (spendingCommitments.oneOff / stats.now.expenses) * 100 : 0}%` }} />
             </div>
             <div className="insight">
               <span className="insightIcon">↗</span>
               <div>
-                <strong>Recurring commitment</strong>
-                <p>{stats.now.expenses > 0
-                  ? `${pct((recurringVsOneOff.recurring / stats.now.expenses) * 100)} of this period's spending is recurring.`
-                  : "Add expenses to see how much of your spending is recurring."}</p>
+                <strong>Installment balance</strong>
+                <p>{installmentSummary.length > 0
+                  ? `${usd(totalInstallmentBalance)} remains across ${installmentSummary.length} active or historical installment plan${installmentSummary.length === 1 ? "" : "s"}.`
+                  : "No installment plans with an end date are configured."}</p>
               </div>
             </div>
           </div>
@@ -979,7 +1045,7 @@ export default function Home() {
             <div className="panelHead">
               <div>
                 <p className="eyebrow">EXPENSE MIX</p>
-                <h2>Recurring vs one-off</h2>
+                <h2>Commitment mix</h2>
               </div>
             </div>
             {stats.now.expenses <= 0 ? (
@@ -988,8 +1054,9 @@ export default function Home() {
               <div className="pieLayout compactPie">
                 <div className="donutWrap">
                   <div className="donut smallDonut" style={{ background: pieGradient([
-                    { value: recurringVsOneOff.recurring, color: "#284653" },
-                    { value: recurringVsOneOff.oneOff, color: "#77a99f" },
+                    { value: spendingCommitments.recurringOngoing, color: "#284653" },
+                    { value: spendingCommitments.installments, color: "#d8a64b" },
+                    { value: spendingCommitments.oneOff, color: "#77a99f" },
                   ]) }}>
                     <div className="donutCenter">
                       <span>Total</span>
@@ -998,13 +1065,56 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="savingsDetails">
-                  <div className="summaryLine"><span>Recurring</span><strong>{usd(recurringVsOneOff.recurring)}</strong></div>
-                  <div className="summaryLine"><span>One-off</span><strong>{usd(recurringVsOneOff.oneOff)}</strong></div>
-                  <div className="summaryLine highlight"><span>Recurring share</span><strong>{pct(stats.now.expenses ? (recurringVsOneOff.recurring / stats.now.expenses) * 100 : 0)}</strong></div>
+                  <div className="summaryLine"><span>Recurring ongoing</span><strong>{usd(spendingCommitments.recurringOngoing)}</strong></div>
+                  <div className="summaryLine"><span>Installments</span><strong>{usd(spendingCommitments.installments)}</strong></div>
+                  <div className="summaryLine"><span>One-off</span><strong>{usd(spendingCommitments.oneOff)}</strong></div>
+                  <div className="summaryLine highlight"><span>Future installment balance</span><strong>{usd(totalInstallmentBalance)}</strong></div>
                 </div>
               </div>
             )}
           </div>
+        </section>
+
+        <section className="panel installmentPanel">
+          <div className="panelHead">
+            <div>
+              <p className="eyebrow">INSTALLMENTS</p>
+              <h2>Installment plans</h2>
+            </div>
+            <strong>{usd(totalInstallmentBalance)} remaining</strong>
+          </div>
+
+          {installmentSummary.length === 0 ? (
+            <EmptyState text="Recurring expenses with an end date will appear here as installments." />
+          ) : (
+            <div className="installmentList">
+              {installmentSummary.map((item) => {
+                const progress = item.totalInstallments > 0
+                  ? (item.paidInstallments / item.totalInstallments) * 100
+                  : 0;
+
+                return (
+                  <div className="installmentItem" key={item.id}>
+                    <div className="installmentHead">
+                      <div>
+                        <strong>{item.description}</strong>
+                        <span>{item.category} · {usd(item.monthlyUSD)}/month</span>
+                      </div>
+                      <strong>{item.paidInstallments}/{item.totalInstallments}</strong>
+                    </div>
+                    <div className="installmentProgress">
+                      <div style={{ width: `${Math.min(100, progress)}%` }} />
+                    </div>
+                    <div className="installmentMeta">
+                      <span>{item.remainingInstallments} installments remaining</span>
+                      <strong>{usd(item.remainingUSD)} remaining</strong>
+                      <span>Ends {item.endDate}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <section className="panel categorySummaryPanel">
@@ -1040,7 +1150,14 @@ export default function Home() {
                         <div className="groupExpenseRow" key={t.id}>
                           <div>
                             <strong>{t.description}</strong>
-                            <small>{t.date}{t.recurringId ? " · Recurring" : " · One-off"}</small>
+                            <small>
+                              {t.date}
+                              {!t.recurringId
+                                ? " · One-off"
+                                : recurringById.get(t.recurringId)?.endDate
+                                  ? " · Installment"
+                                  : " · Recurring ongoing"}
+                            </small>
                           </div>
                           <span>{usd(t.amountUSD)}</span>
                         </div>
@@ -1213,7 +1330,7 @@ export default function Home() {
                     value={repeatEndDate}
                     onChange={(e) => setRepeatEndDate(e.target.value)}
                   />
-                  <small className="fieldHint">Leave empty if it has no end date.</small>
+                  <small className="fieldHint">With an end date, this is treated as an installment plan. Leave empty for an ongoing recurring expense.</small>
                 </label>
               </>
             )}
@@ -1239,7 +1356,7 @@ export default function Home() {
           <div className="panelHead">
             <div>
               <p className="eyebrow">AUTOMATION</p>
-              <h2>Recurring expenses</h2>
+              <h2>Recurring expenses & installments</h2>
             </div>
             <span className="muted">{recurringTransactions.length} configured</span>
           </div>
@@ -1252,9 +1369,11 @@ export default function Home() {
                 <div className="recurringItem" key={r.id}>
                   <div>
                     <strong>{r.description}</strong>
-                    <span>{r.category} · {usd(r.currency === "USD" ? r.amountOriginal : r.amountOriginal / r.fxRate)} · day {r.dayOfMonth} each month</span>
+                    <span>
+                      {r.category} · {usd(r.currency === "USD" ? r.amountOriginal : r.amountOriginal / r.fxRate)} · day {r.dayOfMonth} each month
+                    </span>
                     <small>
-                      Starts {r.startDate}
+                      {r.endDate ? "Installment" : "Recurring ongoing"} · starts {r.startDate}
                       {r.endDate ? ` · ends ${r.endDate}` : " · no end date"}
                     </small>
                   </div>
