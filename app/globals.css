@@ -752,3 +752,12 @@ body {
     gap: 4px;
   }
 }
+
+.periodControls {
+  align-items: center;
+}
+@media (max-width: 900px) {
+  .periodControls {
+    width: 100%;
+  }
+}
