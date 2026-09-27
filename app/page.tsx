@@ -59,7 +59,7 @@ const EXPENSE_CATEGORIES = [
   "Transport / Fuel",
   "Personal Care",
   "Gifts / Donations",
-  "Other",
+  "Miscellaneous",
 ];
 
 const PAYMENT_METHODS = ["Card", "Cash", "Bank Transfer", "Other"];
