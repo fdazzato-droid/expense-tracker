@@ -5,13 +5,10 @@ import { createClient, type User } from "@supabase/supabase-js";
 
 type Currency = "USD" | "UYU";
 type EntryType = "expense" | "income";
-type ExpenseKind = "fixed" | "variable";
-
 type RecurringTransaction = {
   id: string;
   userId: string;
   type: EntryType;
-  expenseKind?: ExpenseKind;
   category: string;
   amountOriginal: number;
   currency: Currency;
@@ -28,7 +25,6 @@ type Transaction = {
   id: string;
   date: string;
   type: EntryType;
-  expenseKind?: ExpenseKind;
   category: string;
   amountOriginal: number;
   currency: Currency;
@@ -130,7 +126,6 @@ export default function Home() {
   const [spendingView, setSpendingView] = useState<"bars" | "pie">("pie");
 
   const [type, setType] = useState<EntryType>("expense");
-  const [expenseKind, setExpenseKind] = useState<ExpenseKind>("variable");
   const [date, setDate] = useState(todayISO());
   const [category, setCategory] = useState("Groceries");
   const [amount, setAmount] = useState("");
@@ -198,7 +193,6 @@ export default function Home() {
       id: row.id,
       date: row.date,
       type: row.type,
-      expenseKind: row.expense_kind ?? undefined,
       category: row.category,
       amountOriginal: Number(row.amount_original),
       currency: row.currency,
@@ -224,7 +218,6 @@ export default function Home() {
       id: row.id,
       userId: row.user_id,
       type: row.type,
-      expenseKind: row.expense_kind ?? undefined,
       category: row.category,
       amountOriginal: Number(row.amount_original),
       currency: row.currency,
@@ -354,14 +347,14 @@ export default function Home() {
     ].filter((item) => item.value > 0);
   }, [stats.now.income, stats.now.expenses, stats.now.savings]);
 
-  const fixedVsVariable = useMemo(() => {
-    const fixed = current
-      .filter((t) => t.type === "expense" && t.expenseKind === "fixed")
+  const recurringVsOneOff = useMemo(() => {
+    const recurring = current
+      .filter((t) => t.type === "expense" && Boolean(t.recurringId))
       .reduce((s, t) => s + t.amountUSD, 0);
-    const variable = current
-      .filter((t) => t.type === "expense" && t.expenseKind !== "fixed")
+    const oneOff = current
+      .filter((t) => t.type === "expense" && !t.recurringId)
       .reduce((s, t) => s + t.amountUSD, 0);
-    return { fixed, variable };
+    return { recurring, oneOff };
   }, [current]);
 
   const monthlyTrend = useMemo(() => {
@@ -379,7 +372,6 @@ export default function Home() {
   function startEdit(t: Transaction) {
     setEditingId(t.id);
     setType(t.type);
-    setExpenseKind(t.expenseKind ?? "variable");
     setDate(t.date);
     setCategory(t.type === "income" ? "Groceries" : t.category);
     setAmount(String(t.amountOriginal));
@@ -403,7 +395,6 @@ export default function Home() {
     setEditingId(null);
     setEditingRecurringId(null);
     setType("expense");
-    setExpenseKind("variable");
     setDate(todayISO());
     setCategory("Groceries");
     setAmount("");
@@ -437,7 +428,7 @@ export default function Home() {
             .from("recurring_transactions")
             .update({
               type,
-              expense_kind: type === "expense" ? expenseKind : null,
+              expense_kind: null,
               category: type === "income" ? "Income" : category,
               amount_original: numericAmount,
               currency,
@@ -460,7 +451,7 @@ export default function Home() {
             .insert({
               user_id: user.id,
               type,
-              expense_kind: type === "expense" ? expenseKind : null,
+              expense_kind: null,
               category: type === "income" ? "Income" : category,
               amount_original: numericAmount,
               currency,
@@ -499,7 +490,7 @@ export default function Home() {
         .update({
           date,
           type,
-          expense_kind: type === "expense" ? expenseKind : null,
+          expense_kind: null,
           category: type === "income" ? "Income" : category,
           amount_original: numericAmount,
           currency,
@@ -529,7 +520,7 @@ export default function Home() {
         .insert({
           user_id: user.id,
           type,
-          expense_kind: type === "expense" ? expenseKind : null,
+          expense_kind: null,
           category: type === "income" ? "Income" : category,
           amount_original: numericAmount,
           currency,
@@ -555,7 +546,7 @@ export default function Home() {
       user_id: user.id,
       date,
       type,
-      expense_kind: type === "expense" ? expenseKind : null,
+      expense_kind: null,
       category: type === "income" ? "Income" : category,
       amount_original: numericAmount,
       currency,
@@ -770,23 +761,23 @@ export default function Home() {
           </div>
 
           <div className="panel">
-            <p className="eyebrow">STRUCTURE</p>
-            <h2>Fixed vs variable</h2>
+            <p className="eyebrow">SPENDING STRUCTURE</p>
+            <h2>Recurring vs one-off</h2>
             <div className="splitNumbers">
-              <div><span>Fixed</span><strong>{usd(fixedVsVariable.fixed)}</strong></div>
-              <div><span>Variable</span><strong>{usd(fixedVsVariable.variable)}</strong></div>
+              <div><span>Recurring</span><strong>{usd(recurringVsOneOff.recurring)}</strong></div>
+              <div><span>One-off</span><strong>{usd(recurringVsOneOff.oneOff)}</strong></div>
             </div>
             <div className="stacked">
-              <div style={{ width: `${stats.now.expenses ? (fixedVsVariable.fixed / stats.now.expenses) * 100 : 0}%` }} />
-              <div style={{ width: `${stats.now.expenses ? (fixedVsVariable.variable / stats.now.expenses) * 100 : 0}%` }} />
+              <div style={{ width: `${stats.now.expenses ? (recurringVsOneOff.recurring / stats.now.expenses) * 100 : 0}%` }} />
+              <div style={{ width: `${stats.now.expenses ? (recurringVsOneOff.oneOff / stats.now.expenses) * 100 : 0}%` }} />
             </div>
             <div className="insight">
               <span className="insightIcon">↗</span>
               <div>
-                <strong>Focus point</strong>
-                <p>{stats.now.income > 0
-                  ? `You are saving ${pct(stats.now.savingsRate)} of your income in this period.`
-                  : "Add monthly income to calculate your savings rate."}</p>
+                <strong>Recurring commitment</strong>
+                <p>{stats.now.expenses > 0
+                  ? `${pct((recurringVsOneOff.recurring / stats.now.expenses) * 100)} of this period's spending is recurring.`
+                  : "Add expenses to see how much of your spending is recurring."}</p>
               </div>
             </div>
           </div>
@@ -827,7 +818,7 @@ export default function Home() {
             <div className="panelHead">
               <div>
                 <p className="eyebrow">EXPENSE MIX</p>
-                <h2>Fixed vs variable</h2>
+                <h2>Recurring vs one-off</h2>
               </div>
             </div>
             {stats.now.expenses <= 0 ? (
@@ -836,8 +827,8 @@ export default function Home() {
               <div className="pieLayout compactPie">
                 <div className="donutWrap">
                   <div className="donut smallDonut" style={{ background: pieGradient([
-                    { value: fixedVsVariable.fixed, color: "#284653" },
-                    { value: fixedVsVariable.variable, color: "#77a99f" },
+                    { value: recurringVsOneOff.recurring, color: "#284653" },
+                    { value: recurringVsOneOff.oneOff, color: "#77a99f" },
                   ]) }}>
                     <div className="donutCenter">
                       <span>Total</span>
@@ -846,9 +837,9 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="savingsDetails">
-                  <div className="summaryLine"><span>Fixed</span><strong>{usd(fixedVsVariable.fixed)}</strong></div>
-                  <div className="summaryLine"><span>Variable</span><strong>{usd(fixedVsVariable.variable)}</strong></div>
-                  <div className="summaryLine highlight"><span>Variable share</span><strong>{pct(stats.now.expenses ? (fixedVsVariable.variable / stats.now.expenses) * 100 : 0)}</strong></div>
+                  <div className="summaryLine"><span>Recurring</span><strong>{usd(recurringVsOneOff.recurring)}</strong></div>
+                  <div className="summaryLine"><span>One-off</span><strong>{usd(recurringVsOneOff.oneOff)}</strong></div>
+                  <div className="summaryLine highlight"><span>Recurring share</span><strong>{pct(stats.now.expenses ? (recurringVsOneOff.recurring / stats.now.expenses) * 100 : 0)}</strong></div>
                 </div>
               </div>
             )}
@@ -901,21 +892,12 @@ export default function Home() {
             </label>
 
             {type === "expense" && (
-              <>
-                <label>
-                  Category
-                  <select value={category} onChange={(e) => setCategory(e.target.value)}>
-                    {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-                  </select>
-                </label>
-                <label>
-                  Expense type
-                  <select value={expenseKind} onChange={(e) => setExpenseKind(e.target.value as ExpenseKind)}>
-                    <option value="variable">Variable</option>
-                    <option value="fixed">Fixed</option>
-                  </select>
-                </label>
-              </>
+              <label>
+                Category
+                <select value={category} onChange={(e) => setCategory(e.target.value)}>
+                  {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                </select>
+              </label>
             )}
 
             <label>
@@ -955,7 +937,7 @@ export default function Home() {
                   checked={repeatMonthly}
                   onChange={(e) => setRepeatMonthly(e.target.checked)}
                 />
-                Repeat every month
+                Recurring monthly expense
               </span>
             </label>
 
@@ -1005,13 +987,13 @@ export default function Home() {
           <div className="panelHead">
             <div>
               <p className="eyebrow">AUTOMATION</p>
-              <h2>Recurring movements</h2>
+              <h2>Recurring expenses</h2>
             </div>
             <span className="muted">{recurringTransactions.length} configured</span>
           </div>
 
           {recurringTransactions.length === 0 ? (
-            <EmptyState text="Mark a movement as recurring to automate it every month." />
+            <EmptyState text="Mark an expense as recurring to automate it every month." />
           ) : (
             <div className="recurringList">
               {recurringTransactions.map((r) => (
