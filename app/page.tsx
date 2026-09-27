@@ -76,10 +76,10 @@ function pieGradient(items: { value: number; color: string }[]) {
   }).join(", ")})`;
 }
 
-const OWNER_EMAIL = "fdazzato@gmail.com";
+const ALLOWED_EMAILS = ["fdazzato@gmail.com", "mmazzatopaz@gmail.com"] as const;
 
 function isAllowedEmail(email?: string | null) {
-  return !!email && email.toLowerCase() === OWNER_EMAIL;
+  return !!email && ALLOWED_EMAILS.includes(email.toLowerCase() as (typeof ALLOWED_EMAILS)[number]);
 }
 const supabase = createClient(
   "https://ltxnpfnuifltxdfcaoni.supabase.co",
@@ -124,7 +124,7 @@ export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMessage, setAuthMessage] = useState("");
-  const [email] = useState(OWNER_EMAIL);
+  const [email, setEmail] = useState("fdazzato@gmail.com");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
@@ -893,7 +893,16 @@ export default function Home() {
         <form className="authCard" onSubmit={signInWithPassword}>
           <FinanceByFrancoLogo />
           <p className="eyebrow">PRIVATE ACCESS</p>
-          <p>Acceso exclusivo para <strong>{OWNER_EMAIL}</strong>.</p>
+          <p>Acceso privado e independiente por usuario.</p>
+          <input
+            className="authInput"
+            type="email"
+            autoComplete="email"
+            placeholder="Email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
           <input
             className="authInput"
             type="password"
@@ -909,7 +918,7 @@ export default function Home() {
             Restablecer contraseña
           </button>
           {authMessage && <p className="authMessage">{authMessage}</p>}
-          <p className="authHint">Esta app está restringida a tu cuenta.</p>
+          <p className="authHint">Cada usuario ve únicamente sus propios movimientos.</p>
         </form>
       </main>
     );
