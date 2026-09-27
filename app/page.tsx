@@ -369,7 +369,7 @@ export default function Home() {
   const pieCategories = useMemo(() => {
     const top = categoryBreakdown.slice(0, 6);
     const remainder = categoryBreakdown.slice(6).reduce((sum, [, value]) => sum + value, 0);
-    const items = remainder > 0 ? [...top, ["Other", remainder] as [string, number]] : top;
+    const items = remainder > 0 ? [...top, ["Other categories", remainder] as [string, number]] : top;
     return items.map(([name, value], index) => ({
       name,
       value,
@@ -791,7 +791,11 @@ export default function Home() {
                 <h2>Where your money goes</h2>
               </div>
               <div className="panelHeadActions">
-                <strong>{usd(stats.now.expenses)}</strong>
+                <strong>{usd(
+                  dashboardCategory === "All categories"
+                    ? categoryBreakdown.reduce((sum, [, value]) => sum + value, 0)
+                    : stats.now.expenses
+                )}</strong>
                 <div className="viewToggle">
                   <button className={spendingView === "pie" ? "miniSeg active" : "miniSeg"} onClick={() => setSpendingView("pie")}>Pie</button>
                   <button className={spendingView === "bars" ? "miniSeg active" : "miniSeg"} onClick={() => setSpendingView("bars")}>Bars</button>
@@ -806,24 +810,40 @@ export default function Home() {
                   <div className="donut" style={{ background: pieGradient(
                     dashboardCategory === "All categories"
                       ? pieCategories
-                      : pieCategories.filter((item) => item.name === dashboardCategory)
+                      : [{
+                          name: dashboardCategory,
+                          value: stats.now.expenses,
+                          color: PIE_COLORS[0],
+                        }]
                   ) }}>
                     <div className="donutCenter">
                       <span>Expenses</span>
-                      <strong>{usd(stats.now.expenses)}</strong>
+                      <strong>{usd(
+                        dashboardCategory === "All categories"
+                          ? categoryBreakdown.reduce((sum, [, value]) => sum + value, 0)
+                          : stats.now.expenses
+                      )}</strong>
                     </div>
                   </div>
                 </div>
                 <div className="pieLegend">
                   {(dashboardCategory === "All categories"
                     ? pieCategories
-                    : pieCategories.filter((item) => item.name === dashboardCategory)
+                    : [{
+                        name: dashboardCategory,
+                        value: stats.now.expenses,
+                        color: PIE_COLORS[0],
+                      }]
                   ).map((item) => (
                     <div className="pieLegendRow" key={item.name}>
                       <span className="legendSwatch" style={{ background: item.color }} />
                       <div>
                         <strong>{item.name}</strong>
-                        <small>{stats.now.expenses > 0 ? pct((item.value / stats.now.expenses) * 100) : "0%"}</small>
+                        <small>{
+                          dashboardCategory === "All categories"
+                            ? pct((item.value / Math.max(categoryBreakdown.reduce((sum, [, value]) => sum + value, 0), 1)) * 100)
+                            : "100.0%"
+                        }</small>
                       </div>
                       <span>{usd(item.value)}</span>
                     </div>
