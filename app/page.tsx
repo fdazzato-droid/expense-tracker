@@ -126,6 +126,7 @@ export default function Home() {
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
   const [selectedYear, setSelectedYear] = useState(todayISO().slice(0, 4));
   const [spendingView, setSpendingView] = useState<"bars" | "pie">("pie");
+  const [dashboardCategory, setDashboardCategory] = useState("All categories");
 
   const [type, setType] = useState<EntryType>("expense");
   const [date, setDate] = useState(todayISO());
@@ -298,13 +299,13 @@ export default function Home() {
     setTransactions([]);
   }
 
-  const current = useMemo(() => {
+  const periodCurrent = useMemo(() => {
     return transactions.filter((t) =>
       view === "month" ? monthKey(t.date) === selectedMonth : t.date.startsWith(selectedYear)
     );
   }, [transactions, view, selectedMonth, selectedYear]);
 
-  const previous = useMemo(() => {
+  const periodPrevious = useMemo(() => {
     if (view === "month") {
       const prev = previousMonthKey(selectedMonth);
       return transactions.filter((t) => monthKey(t.date) === prev);
@@ -312,6 +313,20 @@ export default function Home() {
     const prevYear = String(Number(selectedYear) - 1);
     return transactions.filter((t) => t.date.startsWith(prevYear));
   }, [transactions, view, selectedMonth, selectedYear]);
+
+  const current = useMemo(() => {
+    if (dashboardCategory === "All categories") return periodCurrent;
+    return periodCurrent.filter(
+      (t) => t.type === "income" || (t.type === "expense" && t.category === dashboardCategory)
+    );
+  }, [periodCurrent, dashboardCategory]);
+
+  const previous = useMemo(() => {
+    if (dashboardCategory === "All categories") return periodPrevious;
+    return periodPrevious.filter(
+      (t) => t.type === "income" || (t.type === "expense" && t.category === dashboardCategory)
+    );
+  }, [periodPrevious, dashboardCategory]);
 
   const stats = useMemo(() => {
     const calc = (items: Transaction[]) => {
@@ -326,11 +341,30 @@ export default function Home() {
 
   const categoryBreakdown = useMemo(() => {
     const map = new Map<string, number>();
-    current
+    periodCurrent
       .filter((t) => t.type === "expense")
       .forEach((t) => map.set(t.category, (map.get(t.category) || 0) + t.amountUSD));
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
-  }, [current]);
+  }, [periodCurrent]);
+
+  const groupedExpenseSummary = useMemo(() => {
+    const groups = new Map<string, Transaction[]>();
+    periodCurrent
+      .filter((t) => t.type === "expense")
+      .forEach((t) => {
+        const items = groups.get(t.category) || [];
+        items.push(t);
+        groups.set(t.category, items);
+      });
+
+    return [...groups.entries()]
+      .map(([name, items]) => ({
+        name,
+        total: items.reduce((sum, t) => sum + t.amountUSD, 0),
+        items: items.sort((a, b) => b.date.localeCompare(a.date)),
+      }))
+      .sort((a, b) => b.total - a.total);
+  }, [periodCurrent]);
 
   const pieCategories = useMemo(() => {
     const top = categoryBreakdown.slice(0, 6);
@@ -368,12 +402,17 @@ export default function Home() {
     transactions.forEach((t) => {
       const key = monthKey(t.date);
       const row = months.get(key) || { expenses: 0, income: 0 };
-      if (t.type === "expense") row.expenses += t.amountUSD;
-      else row.income += t.amountUSD;
+      if (t.type === "expense") {
+        if (dashboardCategory === "All categories" || t.category === dashboardCategory) {
+          row.expenses += t.amountUSD;
+        }
+      } else {
+        row.income += t.amountUSD;
+      }
       months.set(key, row);
     });
     return [...months.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-12);
-  }, [transactions]);
+  }, [transactions, dashboardCategory]);
 
   function startEdit(t: Transaction) {
     setEditingId(t.id);
@@ -715,8 +754,18 @@ export default function Home() {
           <div>
             <p className="eyebrow">YOUR FINANCES</p>
             <h1>Dashboard</h1>
+            {dashboardCategory !== "All categories" && <p className="filterContext">Filtered by {dashboardCategory}</p>}
           </div>
           <div className="periodControls">
+            <select
+              className="dashboardFilter"
+              value={dashboardCategory}
+              onChange={(e) => setDashboardCategory(e.target.value)}
+              aria-label="Filter dashboard by expense category"
+            >
+              <option>All categories</option>
+              {EXPENSE_CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+            </select>
             <button className={view === "month" ? "seg active" : "seg"} onClick={() => setView("month")}>Monthly</button>
             <button className={view === "year" ? "seg active" : "seg"} onClick={() => setView("year")}>Annual</button>
             {view === "month" ? (
@@ -749,12 +798,16 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            {categoryBreakdown.length === 0 ? (
+            {(dashboardCategory === "All categories" ? categoryBreakdown : categoryBreakdown.filter(([name]) => name === dashboardCategory)).length === 0 ? (
               <EmptyState text="Add your first expense to see the breakdown." />
             ) : spendingView === "pie" ? (
               <div className="pieLayout">
                 <div className="donutWrap">
-                  <div className="donut" style={{ background: pieGradient(pieCategories) }}>
+                  <div className="donut" style={{ background: pieGradient(
+                    dashboardCategory === "All categories"
+                      ? pieCategories
+                      : pieCategories.filter((item) => item.name === dashboardCategory)
+                  ) }}>
                     <div className="donutCenter">
                       <span>Expenses</span>
                       <strong>{usd(stats.now.expenses)}</strong>
@@ -762,7 +815,10 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="pieLegend">
-                  {pieCategories.map((item) => (
+                  {(dashboardCategory === "All categories"
+                    ? pieCategories
+                    : pieCategories.filter((item) => item.name === dashboardCategory)
+                  ).map((item) => (
                     <div className="pieLegendRow" key={item.name}>
                       <span className="legendSwatch" style={{ background: item.color }} />
                       <div>
@@ -776,7 +832,10 @@ export default function Home() {
               </div>
             ) : (
               <div className="bars">
-                {categoryBreakdown.slice(0, 8).map(([name, value]) => (
+                {(dashboardCategory === "All categories"
+                  ? categoryBreakdown
+                  : categoryBreakdown.filter(([name]) => name === dashboardCategory)
+                ).slice(0, 8).map(([name, value]) => (
                   <div className="barRow" key={name}>
                     <div className="barLabel"><span>{name}</span><strong>{usd(value)}</strong></div>
                     <div className="barTrack"><div className="barFill" style={{ width: `${Math.max(4, (value / maxCategory) * 100)}%` }} /></div>
@@ -870,6 +929,49 @@ export default function Home() {
               </div>
             )}
           </div>
+        </section>
+
+        <section className="panel categorySummaryPanel">
+          <div className="panelHead">
+            <div>
+              <p className="eyebrow">GROUP SUMMARY</p>
+              <h2>Expenses by group</h2>
+            </div>
+            <span className="muted">
+              {dashboardCategory === "All categories" ? "All groups" : dashboardCategory}
+            </span>
+          </div>
+
+          {groupedExpenseSummary.length === 0 ? (
+            <EmptyState text="No expenses in this period." />
+          ) : (
+            <div className="groupSummaryList">
+              {groupedExpenseSummary
+                .filter((group) => dashboardCategory === "All categories" || group.name === dashboardCategory)
+                .map((group) => (
+                  <details className="groupSummaryItem" key={group.name} open={dashboardCategory !== "All categories"}>
+                    <summary>
+                      <div>
+                        <strong>{group.name}</strong>
+                        <span>{group.items.length} {group.items.length === 1 ? "expense" : "expenses"}</span>
+                      </div>
+                      <strong>{usd(group.total)}</strong>
+                    </summary>
+                    <div className="groupExpenseRows">
+                      {group.items.map((t) => (
+                        <div className="groupExpenseRow" key={t.id}>
+                          <div>
+                            <strong>{t.description}</strong>
+                            <small>{t.date}{t.recurringId ? " · Recurring" : " · One-off"}</small>
+                          </div>
+                          <span>{usd(t.amountUSD)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+            </div>
+          )}
         </section>
 
         <section className="panel trendPanel">
