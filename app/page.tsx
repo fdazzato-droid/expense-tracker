@@ -112,6 +112,23 @@ function pct(value: number) {
   return `${value.toFixed(1)}%`;
 }
 
+function parseLocaleNumber(value: string) {
+  const raw = value.trim().replace(/\s/g, "");
+  if (!raw) return NaN;
+
+  // iPhone/Spanish keyboards commonly use a comma as decimal separator.
+  if (raw.includes(",") && raw.includes(".")) {
+    const lastComma = raw.lastIndexOf(",");
+    const lastDot = raw.lastIndexOf(".");
+    if (lastComma > lastDot) {
+      return Number(raw.replace(/\./g, "").replace(",", "."));
+    }
+    return Number(raw.replace(/,/g, ""));
+  }
+
+  return Number(raw.replace(",", "."));
+}
+
 function inclusiveMonthCount(startDate: string, endDate: string) {
   const [sy, sm] = startDate.slice(0, 7).split("-").map(Number);
   const [ey, em] = endDate.slice(0, 7).split("-").map(Number);
@@ -153,6 +170,8 @@ export default function Home() {
   const [repeatMonthly, setRepeatMonthly] = useState(false);
   const [repeatDay, setRepeatDay] = useState("1");
   const [repeatEndDate, setRepeatEndDate] = useState("");
+  const [savingMovement, setSavingMovement] = useState(false);
+  const [movementMessage, setMovementMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -637,23 +656,37 @@ export default function Home() {
     setRepeatMonthly(false);
     setRepeatDay("1");
     setRepeatEndDate("");
+    setMovementMessage("");
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const numericAmount = Number(amount);
-    const numericFx = Number(fxRate);
+    const numericAmount = parseLocaleNumber(amount);
+    const numericFx = parseLocaleNumber(fxRate);
+
+    setMovementMessage("");
 
     if (!description.trim()) {
-      setAuthMessage("Agregá una descripción para identificar este movimiento.");
+      setMovementMessage("Agregá una descripción para identificar este movimiento.");
       return;
     }
-    if (!numericAmount || numericAmount <= 0) return;
-    if (currency === "UYU" && (!numericFx || numericFx <= 0)) return;
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setMovementMessage("Ingresá un monto válido. Podés usar coma o punto para los decimales.");
+      return;
+    }
+    if (currency === "UYU" && (!Number.isFinite(numericFx) || numericFx <= 0)) {
+      setMovementMessage("La cotización UYU/USD no es válida.");
+      return;
+    }
 
     const amountUSD = currency === "USD" ? numericAmount : numericAmount / numericFx;
 
-    if (!user || !isAllowedEmail(user.email)) return;
+    if (!user || !isAllowedEmail(user.email)) {
+      setMovementMessage("Tu sesión no está disponible. Volvé a iniciar sesión.");
+      return;
+    }
+
+    setSavingMovement(true);
 
     if (editingId) {
       let recurringId = editingRecurringId;
@@ -682,7 +715,8 @@ export default function Home() {
               .eq("id", editingRecurringId);
 
             if (recurringError) {
-              setAuthMessage(recurringError.message);
+              setMovementMessage(recurringError.message);
+              setSavingMovement(false);
               return;
             }
           } else {
@@ -692,7 +726,8 @@ export default function Home() {
               .eq("id", editingRecurringId);
 
             if (recurringError) {
-              setAuthMessage(recurringError.message);
+              setMovementMessage(recurringError.message);
+              setSavingMovement(false);
               return;
             }
             recurringId = null;
@@ -723,7 +758,8 @@ export default function Home() {
           .single();
 
         if (recurringError) {
-          setAuthMessage(recurringError.message);
+          setMovementMessage(recurringError.message);
+              setSavingMovement(false);
           return;
         }
         recurringId = recurringRow.id;
@@ -748,12 +784,15 @@ export default function Home() {
         .eq("id", editingId);
 
       if (error) {
-        setAuthMessage(error.message);
+        setMovementMessage(error.message);
+        setSavingMovement(false);
         return;
       }
 
       cancelEdit();
       await loadTransactions();
+      setMovementMessage("Cambios guardados.");
+      setSavingMovement(false);
       return;
     }
 
@@ -782,7 +821,8 @@ export default function Home() {
         .single();
 
       if (recurringError) {
-        setAuthMessage(recurringError.message);
+        setMovementMessage(recurringError.message);
+              setSavingMovement(false);
         return;
       }
       recurringId = recurringRow.id;
@@ -805,7 +845,8 @@ export default function Home() {
     });
 
     if (error) {
-      setAuthMessage(error.message);
+      setMovementMessage(error.message);
+        setSavingMovement(false);
       return;
     }
 
@@ -816,6 +857,8 @@ export default function Home() {
     setRepeatDay("1");
     setRepeatEndDate("");
     await loadTransactions();
+    setMovementMessage("Movimiento guardado correctamente.");
+    setSavingMovement(false);
   }
 
   async function removeTransaction(id: string) {
@@ -1534,7 +1577,7 @@ export default function Home() {
 
             <label>
               Amount
-              <input inputMode="decimal" placeholder="0.00" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+              <input inputMode="decimal" enterKeyHint="next" placeholder="0,00" value={amount} onChange={(e) => setAmount(e.target.value)} required />
             </label>
 
             <label>
@@ -1548,7 +1591,7 @@ export default function Home() {
             {currency === "UYU" && (
               <label>
                 UYU per USD
-                <input inputMode="decimal" value={fxRate} onChange={(e) => setFxRate(e.target.value)} required />
+                <input inputMode="decimal" enterKeyHint="done" value={fxRate} onChange={(e) => setFxRate(e.target.value)} required />
               </label>
             )}
 
@@ -1641,12 +1684,21 @@ export default function Home() {
 
             <div className="wide submitRow">
               <div className="conversionPreview">
-                {amount && currency === "UYU" && Number(fxRate) > 0
-                  ? `≈ ${usd(Number(amount) / Number(fxRate))}`
-                  : currency === "USD" && amount ? usd(Number(amount)) : ""}
+                {amount && currency === "UYU" && parseLocaleNumber(fxRate) > 0 && parseLocaleNumber(amount) > 0
+                  ? `≈ ${usd(parseLocaleNumber(amount) / parseLocaleNumber(fxRate))}`
+                  : currency === "USD" && amount && parseLocaleNumber(amount) > 0
+                    ? usd(parseLocaleNumber(amount))
+                    : ""}
               </div>
-              {editingId && <button className="ghost" type="button" onClick={cancelEdit}>Cancel</button>}
-              <button className="primary" type="submit">{editingId ? "Save changes" : "Save movement"}</button>
+              {movementMessage && (
+                <span className={movementMessage.toLowerCase().includes("guardad") ? "movementStatus success" : "movementStatus"}>
+                  {movementMessage}
+                </span>
+              )}
+              {editingId && <button className="ghost" type="button" onClick={cancelEdit} disabled={savingMovement}>Cancel</button>}
+              <button className="primary" type="submit" disabled={savingMovement}>
+                {savingMovement ? "Guardando…" : editingId ? "Save changes" : "Save movement"}
+              </button>
             </div>
           </form>
         </section>
