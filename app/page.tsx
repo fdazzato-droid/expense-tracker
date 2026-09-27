@@ -7,6 +7,23 @@ type Currency = "USD" | "UYU";
 type EntryType = "expense" | "income";
 type ExpenseKind = "fixed" | "variable";
 
+type RecurringTransaction = {
+  id: string;
+  userId: string;
+  type: EntryType;
+  expenseKind?: ExpenseKind;
+  category: string;
+  amountOriginal: number;
+  currency: Currency;
+  fxRate: number;
+  paymentMethod?: string;
+  notes?: string;
+  dayOfMonth: number;
+  startDate: string;
+  endDate?: string;
+  active: boolean;
+};
+
 type Transaction = {
   id: string;
   date: string;
@@ -98,6 +115,7 @@ function pct(value: number) {
 
 export default function Home() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authMessage, setAuthMessage] = useState("");
@@ -119,6 +137,9 @@ export default function Home() {
   const [fxRate, setFxRate] = useState("40");
   const [paymentMethod, setPaymentMethod] = useState("Card");
   const [notes, setNotes] = useState("");
+  const [repeatMonthly, setRepeatMonthly] = useState(false);
+  const [repeatDay, setRepeatDay] = useState("1");
+  const [repeatEndDate, setRepeatEndDate] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -157,6 +178,8 @@ export default function Home() {
   }, []);
 
   async function loadTransactions() {
+    await supabase.rpc("materialize_recurring_transactions");
+
     const { data, error } = await supabase
       .from("transactions")
       .select("*")
@@ -181,6 +204,33 @@ export default function Home() {
       paymentMethod: row.payment_method ?? undefined,
       notes: row.notes ?? undefined,
       createdAt: row.created_at,
+    })));
+
+    const { data: recurringData, error: recurringError } = await supabase
+      .from("recurring_transactions")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (recurringError) {
+      setAuthMessage(recurringError.message);
+      return;
+    }
+
+    setRecurringTransactions((recurringData ?? []).map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      type: row.type,
+      expenseKind: row.expense_kind ?? undefined,
+      category: row.category,
+      amountOriginal: Number(row.amount_original),
+      currency: row.currency,
+      fxRate: Number(row.fx_rate),
+      paymentMethod: row.payment_method ?? undefined,
+      notes: row.notes ?? undefined,
+      dayOfMonth: Number(row.day_of_month),
+      startDate: row.start_date,
+      endDate: row.end_date ?? undefined,
+      active: Boolean(row.active),
     })));
   }
 
@@ -334,6 +384,36 @@ export default function Home() {
 
     if (!user || !isAllowedEmail(user.email)) return;
 
+    let recurringId: string | null = null;
+
+    if (repeatMonthly) {
+      const { data: recurringRow, error: recurringError } = await supabase
+        .from("recurring_transactions")
+        .insert({
+          user_id: user.id,
+          type,
+          expense_kind: type === "expense" ? expenseKind : null,
+          category: type === "income" ? "Income" : category,
+          amount_original: numericAmount,
+          currency,
+          fx_rate: currency === "USD" ? 1 : numericFx,
+          payment_method: type === "expense" ? paymentMethod : null,
+          notes: notes.trim() || null,
+          day_of_month: Number(repeatDay),
+          start_date: date,
+          end_date: repeatEndDate || null,
+          active: true,
+        })
+        .select("id")
+        .single();
+
+      if (recurringError) {
+        setAuthMessage(recurringError.message);
+        return;
+      }
+      recurringId = recurringRow.id;
+    }
+
     const { error } = await supabase.from("transactions").insert({
       user_id: user.id,
       date,
@@ -346,6 +426,7 @@ export default function Home() {
       amount_usd: Number(amountUSD.toFixed(2)),
       payment_method: type === "expense" ? paymentMethod : null,
       notes: notes.trim() || null,
+      recurring_id: recurringId,
     });
 
     if (error) {
@@ -355,11 +436,38 @@ export default function Home() {
 
     setAmount("");
     setNotes("");
+    setRepeatMonthly(false);
+    setRepeatDay("1");
+    setRepeatEndDate("");
     await loadTransactions();
   }
 
   async function removeTransaction(id: string) {
     const { error } = await supabase.from("transactions").delete().eq("id", id);
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+    await loadTransactions();
+  }
+
+  async function toggleRecurring(id: string, active: boolean) {
+    const { error } = await supabase
+      .from("recurring_transactions")
+      .update({ active })
+      .eq("id", id);
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+    await loadTransactions();
+  }
+
+  async function deleteRecurring(id: string) {
+    const { error } = await supabase
+      .from("recurring_transactions")
+      .delete()
+      .eq("id", id);
     if (error) {
       setAuthMessage(error.message);
       return;
@@ -702,6 +810,43 @@ export default function Home() {
               </label>
             )}
 
+            <label className="wide recurringToggle">
+              <span>Recurring</span>
+              <span className="checkLine">
+                <input
+                  type="checkbox"
+                  checked={repeatMonthly}
+                  onChange={(e) => setRepeatMonthly(e.target.checked)}
+                />
+                Repeat every month
+              </span>
+            </label>
+
+            {repeatMonthly && (
+              <>
+                <label>
+                  Day of month
+                  <input
+                    type="number"
+                    min="1"
+                    max="28"
+                    value={repeatDay}
+                    onChange={(e) => setRepeatDay(e.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  End date
+                  <input
+                    type="date"
+                    value={repeatEndDate}
+                    onChange={(e) => setRepeatEndDate(e.target.value)}
+                  />
+                  <small className="fieldHint">Leave empty if it has no end date.</small>
+                </label>
+              </>
+            )}
+
             <label className="wide">
               Notes
               <input placeholder="Optional" value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -716,6 +861,44 @@ export default function Home() {
               <button className="primary" type="submit">Save movement</button>
             </div>
           </form>
+        </section>
+
+        <section className="panel recurringPanel">
+          <div className="panelHead">
+            <div>
+              <p className="eyebrow">AUTOMATION</p>
+              <h2>Recurring movements</h2>
+            </div>
+            <span className="muted">{recurringTransactions.length} configured</span>
+          </div>
+
+          {recurringTransactions.length === 0 ? (
+            <EmptyState text="Mark a movement as recurring to automate it every month." />
+          ) : (
+            <div className="recurringList">
+              {recurringTransactions.map((r) => (
+                <div className="recurringItem" key={r.id}>
+                  <div>
+                    <strong>{r.category}</strong>
+                    <span>{usd(r.currency === "USD" ? r.amountOriginal : r.amountOriginal / r.fxRate)} · day {r.dayOfMonth} each month</span>
+                    <small>
+                      Starts {r.startDate}
+                      {r.endDate ? ` · ends ${r.endDate}` : " · no end date"}
+                    </small>
+                  </div>
+                  <div className="recurringActions">
+                    <button
+                      className={r.active ? "ghost" : "primary"}
+                      onClick={() => toggleRecurring(r.id, !r.active)}
+                    >
+                      {r.active ? "Pause" : "Activate"}
+                    </button>
+                    <button className="ghost danger" onClick={() => deleteRecurring(r.id)}>Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="panel accountPanel">
