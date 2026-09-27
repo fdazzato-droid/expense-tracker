@@ -1205,3 +1205,36 @@ body {
     text-align: center;
   }
 }
+
+/* Reliable mobile movement entry feedback */
+.movementStatus {
+  margin-right: auto;
+  max-width: 360px;
+  color: #a14b4b;
+  font-size: 11px;
+  line-height: 1.35;
+  font-weight: 700;
+}
+.movementStatus.success {
+  color: #146c5b;
+}
+.submitRow button:disabled {
+  opacity: .62;
+  cursor: wait;
+}
+@media (max-width: 650px) {
+  .movementStatus {
+    width: 100%;
+    max-width: none;
+    padding: 9px 11px;
+    border-radius: 9px;
+    background: #fff4f4;
+  }
+  .movementStatus.success {
+    background: #eef7f5;
+  }
+  .submitRow .primary {
+    width: 100%;
+    min-height: 48px;
+  }
+}
