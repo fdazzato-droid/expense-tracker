@@ -425,3 +425,15 @@ body {
     flex-direction: column;
   }
 }
+
+.rowActions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+@media (max-width: 650px) {
+  .rowActions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
