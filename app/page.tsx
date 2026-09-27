@@ -922,9 +922,10 @@ export default function Home() {
           <p className="muted">Personal finance dashboard</p>
         </div>
         <nav>
-          <a href="#dashboard" className="navItem active">Dashboard</a>
+          <button className={dashboardTab === "overview" ? "navItem navButton active" : "navItem navButton"} onClick={() => setDashboardTab("overview")}>Overview</button>
+          <button className={dashboardTab === "commitments" ? "navItem navButton active" : "navItem navButton"} onClick={() => setDashboardTab("commitments")}>Commitments</button>
+          <button className={dashboardTab === "details" ? "navItem navButton active" : "navItem navButton"} onClick={() => setDashboardTab("details")}>Details</button>
           <a href="#add" className="navItem">Add movement</a>
-          <a href="#history" className="navItem">History</a>
         </nav>
         <div className="sidebarFoot accountFoot">
           <span className="statusDot online" />
@@ -1065,9 +1066,7 @@ export default function Home() {
           <MetricCard label="Savings rate" value={pct(stats.now.savingsRate)} sub="Share of income saved" />
         </section>
 
-        {dashboardTab === "overview" && (
-          <>
-        <section className="gridTwo">
+        <section className={dashboardTab === "overview" ? "gridTwo biView" : "biHidden"}>
           <div className="panel visualPanel">
             <div className="panelHead">
               <div>
@@ -1194,12 +1193,7 @@ export default function Home() {
           </div>
         </section>
 
-        {dashboardTab === "overview" && (
-          <>
-          </>
-        )}
-
-        <section className="gridTwo insightGrid">
+        <section className={dashboardTab === "overview" ? "gridTwo insightGrid biView" : "biHidden"}>
           <div className="panel visualPanel">
             <div className="panelHead">
               <div>
@@ -1264,12 +1258,7 @@ export default function Home() {
           </div>
         </section>
 
-        {dashboardTab === "commitments" && (
-          <>
-          </>
-        )}
-
-        <section className="panel commitmentDetailsPanel">
+        <section className={dashboardTab === "commitments" ? "panel commitmentDetailsPanel biView" : "biHidden"}>
           <div className="panelHead">
             <div>
               <p className="eyebrow">COMMITMENT DETAILS</p>
@@ -1339,12 +1328,7 @@ export default function Home() {
           </div>
         </section>
 
-        {dashboardTab === "commitments" && (
-          <>
-          </>
-        )}
-
-        <section className="panel installmentPanel">
+        <section className={dashboardTab === "commitments" ? "panel installmentPanel biView" : "biHidden"}>
           <div className="panelHead">
             <div>
               <p className="eyebrow">INSTALLMENTS</p>
@@ -1386,62 +1370,7 @@ export default function Home() {
           )}
         </section>
 
-        {dashboardTab === "details" && (
-          <>
-        <section className="panel biDetailPanel">
-          <div className="panelHead">
-            <div>
-              <p className="eyebrow">TRANSACTION DETAIL</p>
-              <h2>Expense detail</h2>
-            </div>
-            <span className="muted">
-              {current.filter((t) => t.type === "expense").length} visible
-            </span>
-          </div>
-
-          {current.filter((t) => t.type === "expense").length === 0 ? (
-            <EmptyState text="No expenses match the current filters." />
-          ) : (
-            <div className="tableWrap biTableWrap">
-              <table className="biTable">
-                <thead>
-                  <tr>
-                    <th>Description</th>
-                    <th>Group</th>
-                    <th>Commitment</th>
-                    <th>Date</th>
-                    <th>USD</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {current
-                    .filter((t) => t.type === "expense")
-                    .map((t) => (
-                      <tr key={t.id}>
-                        <td><strong>{t.description}</strong></td>
-                        <td>{t.category}</td>
-                        <td><span className="commitmentBadge">{commitmentTypeForTransaction(t)}</span></td>
-                        <td>{t.date}</td>
-                        <td><strong>{usd(t.amountUSD)}</strong></td>
-                        <td><button className="ghost" onClick={() => startEdit(t)}>Edit</button></td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        {dashboardTab === "overview" && (
-          <>
-          </>
-        )}
-
-          </>
-        )}
-
-        <section className="panel categorySummaryPanel">
+        <section className={dashboardTab === "details" ? "panel categorySummaryPanel biView" : "biHidden"}>
           <div className="panelHead">
             <div>
               <p className="eyebrow">GROUP SUMMARY</p>
@@ -1487,7 +1416,50 @@ export default function Home() {
           )}
         </section>
 
-        <section className="panel trendPanel">
+        <section className={dashboardTab === "details" ? "panel biDetailPanel biView" : "biHidden"}>
+          <div className="panelHead">
+            <div>
+              <p className="eyebrow">TRANSACTION DETAIL</p>
+              <h2>Expense detail</h2>
+            </div>
+            <span className="muted">{current.filter((t) => t.type === "expense").length} visible</span>
+          </div>
+
+          {current.filter((t) => t.type === "expense").length === 0 ? (
+            <EmptyState text="No expenses match the current filters." />
+          ) : (
+            <div className="tableWrap biTableWrap">
+              <table className="biTable">
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th>Group</th>
+                    <th>Commitment</th>
+                    <th>Date</th>
+                    <th>USD</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {current
+                    .filter((t) => t.type === "expense")
+                    .map((t) => (
+                      <tr key={t.id}>
+                        <td><strong>{t.description}</strong></td>
+                        <td>{t.category}</td>
+                        <td><span className="commitmentBadge">{commitmentTypeForTransaction(t)}</span></td>
+                        <td>{t.date}</td>
+                        <td><strong>{usd(t.amountUSD)}</strong></td>
+                        <td><button className="ghost" onClick={() => startEdit(t)}>Edit</button></td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className={dashboardTab === "overview" ? "panel trendPanel biView" : "biHidden"}>
           <div className="panelHead">
             <div>
               <p className="eyebrow">TREND</p>
@@ -1509,9 +1481,6 @@ export default function Home() {
           )}
           <div className="legend"><span><i className="dot income" />Income</span><span><i className="dot expense" />Expenses</span></div>
         </section>
-
-          </>
-        )}
 
         <section id="add" className="panel addPanel">
           <div className="panelHead">
