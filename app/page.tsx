@@ -134,6 +134,8 @@ export default function Home() {
   const [spendingView, setSpendingView] = useState<"bars" | "pie">("pie");
   const [dashboardCategories, setDashboardCategories] = useState<string[]>([]);
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
+  const [dashboardCommitments, setDashboardCommitments] = useState<string[]>([]);
+  const [commitmentFilterOpen, setCommitmentFilterOpen] = useState(false);
 
   const [type, setType] = useState<EntryType>("expense");
   const [date, setDate] = useState(todayISO());
@@ -306,6 +308,13 @@ export default function Home() {
     setTransactions([]);
   }
 
+  function commitmentTypeForTransaction(t: Transaction) {
+    if (t.type !== "expense") return "Income";
+    if (!t.recurringId) return "One-off";
+    const recurring = recurringTransactions.find((r) => r.id === t.recurringId);
+    return recurring?.endDate ? "Installments" : "Recurring ongoing";
+  }
+
   const periodCurrent = useMemo(() => {
     return transactions.filter((t) =>
       view === "month" ? monthKey(t.date) === selectedMonth : t.date.startsWith(selectedYear)
@@ -322,18 +331,34 @@ export default function Home() {
   }, [transactions, view, selectedMonth, selectedYear]);
 
   const current = useMemo(() => {
-    if (dashboardCategories.length === 0) return periodCurrent;
-    return periodCurrent.filter(
-      (t) => t.type === "income" || (t.type === "expense" && dashboardCategories.includes(t.category))
-    );
-  }, [periodCurrent, dashboardCategories]);
+    return periodCurrent.filter((t) => {
+      if (t.type === "income") return true;
+
+      const categoryMatches =
+        dashboardCategories.length === 0 || dashboardCategories.includes(t.category);
+
+      const commitmentMatches =
+        dashboardCommitments.length === 0 ||
+        dashboardCommitments.includes(commitmentTypeForTransaction(t));
+
+      return categoryMatches && commitmentMatches;
+    });
+  }, [periodCurrent, dashboardCategories, dashboardCommitments, recurringTransactions]);
 
   const previous = useMemo(() => {
-    if (dashboardCategories.length === 0) return periodPrevious;
-    return periodPrevious.filter(
-      (t) => t.type === "income" || (t.type === "expense" && dashboardCategories.includes(t.category))
-    );
-  }, [periodPrevious, dashboardCategories]);
+    return periodPrevious.filter((t) => {
+      if (t.type === "income") return true;
+
+      const categoryMatches =
+        dashboardCategories.length === 0 || dashboardCategories.includes(t.category);
+
+      const commitmentMatches =
+        dashboardCommitments.length === 0 ||
+        dashboardCommitments.includes(commitmentTypeForTransaction(t));
+
+      return categoryMatches && commitmentMatches;
+    });
+  }, [periodPrevious, dashboardCategories, dashboardCommitments, recurringTransactions]);
 
   const stats = useMemo(() => {
     const calc = (items: Transaction[]) => {
@@ -349,15 +374,27 @@ export default function Home() {
   const categoryBreakdown = useMemo(() => {
     const map = new Map<string, number>();
     periodCurrent
-      .filter((t) => t.type === "expense")
+      .filter((t) =>
+        t.type === "expense" &&
+        (
+          dashboardCommitments.length === 0 ||
+          dashboardCommitments.includes(commitmentTypeForTransaction(t))
+        )
+      )
       .forEach((t) => map.set(t.category, (map.get(t.category) || 0) + t.amountUSD));
     return [...map.entries()].sort((a, b) => b[1] - a[1]);
-  }, [periodCurrent]);
+  }, [periodCurrent, dashboardCommitments, recurringTransactions]);
 
   const groupedExpenseSummary = useMemo(() => {
     const groups = new Map<string, Transaction[]>();
     periodCurrent
-      .filter((t) => t.type === "expense")
+      .filter((t) =>
+        t.type === "expense" &&
+        (
+          dashboardCommitments.length === 0 ||
+          dashboardCommitments.includes(commitmentTypeForTransaction(t))
+        )
+      )
       .forEach((t) => {
         const items = groups.get(t.category) || [];
         items.push(t);
@@ -426,7 +463,8 @@ export default function Home() {
       .filter((r) =>
         r.type === "expense" &&
         Boolean(r.endDate) &&
-        (dashboardCategories.length === 0 || dashboardCategories.includes(r.category))
+        (dashboardCategories.length === 0 || dashboardCategories.includes(r.category)) &&
+        (dashboardCommitments.length === 0 || dashboardCommitments.includes("Installments"))
       )
       .map((r) => {
         const endDate = r.endDate!;
@@ -455,7 +493,7 @@ export default function Home() {
         };
       })
       .sort((a, b) => a.endDate!.localeCompare(b.endDate!));
-  }, [recurringTransactions, transactions, dashboardCategories]);
+  }, [recurringTransactions, transactions, dashboardCategories, dashboardCommitments]);
 
   const totalInstallmentBalance = useMemo(
     () => installmentSummary.reduce((sum, item) => sum + item.remainingUSD, 0),
@@ -468,7 +506,13 @@ export default function Home() {
       const key = monthKey(t.date);
       const row = months.get(key) || { expenses: 0, income: 0 };
       if (t.type === "expense") {
-        if (dashboardCategories.length === 0 || dashboardCategories.includes(t.category)) {
+        const categoryMatches =
+          dashboardCategories.length === 0 || dashboardCategories.includes(t.category);
+        const commitmentMatches =
+          dashboardCommitments.length === 0 ||
+          dashboardCommitments.includes(commitmentTypeForTransaction(t));
+
+        if (categoryMatches && commitmentMatches) {
           row.expenses += t.amountUSD;
         }
       } else {
@@ -477,7 +521,7 @@ export default function Home() {
       months.set(key, row);
     });
     return [...months.entries()].sort((a, b) => a[0].localeCompare(b[0])).slice(-12);
-  }, [transactions, dashboardCategories]);
+  }, [transactions, dashboardCategories, dashboardCommitments, recurringTransactions]);
 
   function toggleDashboardCategory(name: string) {
     setDashboardCategories((current) =>
@@ -493,6 +537,22 @@ export default function Home() {
 
   function selectAllDashboardCategories() {
     setDashboardCategories([...EXPENSE_CATEGORIES]);
+  }
+
+  function toggleDashboardCommitment(name: string) {
+    setDashboardCommitments((current) =>
+      current.includes(name)
+        ? current.filter((c) => c !== name)
+        : [...current, name]
+    );
+  }
+
+  function clearDashboardCommitments() {
+    setDashboardCommitments([]);
+  }
+
+  function selectAllDashboardCommitments() {
+    setDashboardCommitments(["One-off", "Recurring ongoing", "Installments"]);
   }
 
   function startEdit(t: Transaction) {
@@ -835,9 +895,14 @@ export default function Home() {
           <div>
             <p className="eyebrow">YOUR FINANCES</p>
             <h1>Dashboard</h1>
-            {dashboardCategories.length > 0 && (
+            {(dashboardCategories.length > 0 || dashboardCommitments.length > 0) && (
               <p className="filterContext">
-                Filtered by {dashboardCategories.join(", ")}
+                Filtered by {
+                  [
+                    ...dashboardCategories,
+                    ...dashboardCommitments,
+                  ].join(", ")
+                }
               </p>
             )}
           </div>
@@ -868,6 +933,40 @@ export default function Home() {
                           type="checkbox"
                           checked={dashboardCategories.includes(c)}
                           onChange={() => toggleDashboardCategory(c)}
+                        />
+                        <span>{c}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="multiFilter">
+              <button
+                type="button"
+                className="dashboardFilter multiFilterButton"
+                onClick={() => setCommitmentFilterOpen((open) => !open)}
+              >
+                {dashboardCommitments.length === 0
+                  ? "All commitment types"
+                  : dashboardCommitments.length === 1
+                    ? dashboardCommitments[0]
+                    : `${dashboardCommitments.length} commitment types`}
+                <span>▾</span>
+              </button>
+              {commitmentFilterOpen && (
+                <div className="multiFilterMenu">
+                  <div className="multiFilterActions">
+                    <button type="button" onClick={clearDashboardCommitments}>All types</button>
+                    <button type="button" onClick={selectAllDashboardCommitments}>Select all</button>
+                  </div>
+                  <div className="multiFilterOptions">
+                    {["One-off", "Recurring ongoing", "Installments"].map((c) => (
+                      <label key={c} className="multiFilterOption">
+                        <input
+                          type="checkbox"
+                          checked={dashboardCommitments.includes(c)}
+                          onChange={() => toggleDashboardCommitment(c)}
                         />
                         <span>{c}</span>
                       </label>
@@ -1152,11 +1251,7 @@ export default function Home() {
                             <strong>{t.description}</strong>
                             <small>
                               {t.date}
-                              {!t.recurringId
-                                ? " · One-off"
-                                : recurringById.get(t.recurringId)?.endDate
-                                  ? " · Installment"
-                                  : " · Recurring ongoing"}
+                              {" · " + commitmentTypeForTransaction(t)}
                             </small>
                           </div>
                           <span>{usd(t.amountUSD)}</span>
