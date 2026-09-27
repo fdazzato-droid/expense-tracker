@@ -138,6 +138,7 @@ export default function Home() {
   const [notes, setNotes] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
+  const [editScope, setEditScope] = useState<"single" | "future">("single");
   const [repeatMonthly, setRepeatMonthly] = useState(false);
   const [repeatDay, setRepeatDay] = useState("1");
   const [repeatEndDate, setRepeatEndDate] = useState("");
@@ -391,6 +392,7 @@ export default function Home() {
       : undefined;
 
     setEditingRecurringId(recurring?.id ?? null);
+    setEditScope("single");
     setRepeatMonthly(Boolean(recurring));
     setRepeatDay(String(recurring?.dayOfMonth ?? Number(t.date.slice(8, 10))));
     setRepeatEndDate(recurring?.endDate ?? "");
@@ -400,6 +402,7 @@ export default function Home() {
   function cancelEdit() {
     setEditingId(null);
     setEditingRecurringId(null);
+    setEditScope("single");
     setType("expense");
     setDate(todayISO());
     setCategory("Groceries");
@@ -433,69 +436,75 @@ export default function Home() {
     if (editingId) {
       let recurringId = editingRecurringId;
 
-      if (repeatMonthly) {
-        if (editingRecurringId) {
-          const { error: recurringError } = await supabase
-            .from("recurring_transactions")
-            .update({
-              type,
-              expense_kind: null,
-              category: type === "income" ? "Income" : category,
-              description: description.trim(),
-              amount_original: numericAmount,
-              currency,
-              fx_rate: currency === "USD" ? 1 : numericFx,
-              payment_method: type === "expense" ? paymentMethod : null,
-              notes: notes.trim() || null,
-              day_of_month: Number(repeatDay),
-              end_date: repeatEndDate || null,
-              active: true,
-            })
-            .eq("id", editingRecurringId);
+      // Existing recurring expense: choose whether changes affect only this occurrence
+      // or the recurring rule used for future months.
+      if (editingRecurringId) {
+        if (editScope === "future") {
+          if (repeatMonthly) {
+            const { error: recurringError } = await supabase
+              .from("recurring_transactions")
+              .update({
+                type,
+                expense_kind: null,
+                category: type === "income" ? "Income" : category,
+                description: description.trim(),
+                amount_original: numericAmount,
+                currency,
+                fx_rate: currency === "USD" ? 1 : numericFx,
+                payment_method: type === "expense" ? paymentMethod : null,
+                notes: notes.trim() || null,
+                day_of_month: Number(repeatDay),
+                end_date: repeatEndDate || null,
+                active: true,
+              })
+              .eq("id", editingRecurringId);
 
-          if (recurringError) {
-            setAuthMessage(recurringError.message);
-            return;
-          }
-        } else {
-          const { data: recurringRow, error: recurringError } = await supabase
-            .from("recurring_transactions")
-            .insert({
-              user_id: user.id,
-              type,
-              expense_kind: null,
-              category: type === "income" ? "Income" : category,
-              description: description.trim(),
-              amount_original: numericAmount,
-              currency,
-              fx_rate: currency === "USD" ? 1 : numericFx,
-              payment_method: type === "expense" ? paymentMethod : null,
-              notes: notes.trim() || null,
-              day_of_month: Number(repeatDay),
-              start_date: date,
-              end_date: repeatEndDate || null,
-              active: true,
-            })
-            .select("id")
-            .single();
+            if (recurringError) {
+              setAuthMessage(recurringError.message);
+              return;
+            }
+          } else {
+            const { error: recurringError } = await supabase
+              .from("recurring_transactions")
+              .update({ active: false })
+              .eq("id", editingRecurringId);
 
-          if (recurringError) {
-            setAuthMessage(recurringError.message);
-            return;
+            if (recurringError) {
+              setAuthMessage(recurringError.message);
+              return;
+            }
+            recurringId = null;
           }
-          recurringId = recurringRow.id;
         }
-      } else if (editingRecurringId) {
-        const { error: recurringError } = await supabase
+        // editScope === "single": leave the recurring rule untouched.
+      } else if (repeatMonthly) {
+        // A previously one-off movement is being converted into a recurring one.
+        const { data: recurringRow, error: recurringError } = await supabase
           .from("recurring_transactions")
-          .update({ active: false })
-          .eq("id", editingRecurringId);
+          .insert({
+            user_id: user.id,
+            type,
+            expense_kind: null,
+            category: type === "income" ? "Income" : category,
+            description: description.trim(),
+            amount_original: numericAmount,
+            currency,
+            fx_rate: currency === "USD" ? 1 : numericFx,
+            payment_method: type === "expense" ? paymentMethod : null,
+            notes: notes.trim() || null,
+            day_of_month: Number(repeatDay),
+            start_date: date,
+            end_date: repeatEndDate || null,
+            active: true,
+          })
+          .select("id")
+          .single();
 
         if (recurringError) {
           setAuthMessage(recurringError.message);
           return;
         }
-        recurringId = null;
+        recurringId = recurringRow.id;
       }
 
       const { error } = await supabase
@@ -956,19 +965,55 @@ export default function Home() {
               </label>
             )}
 
+            {editingId && editingRecurringId && (
+              <div className="wide editScopeBox">
+                <span className="editScopeTitle">Apply changes to</span>
+                <label className={editScope === "single" ? "scopeOption active" : "scopeOption"}>
+                  <input
+                    type="radio"
+                    name="editScope"
+                    value="single"
+                    checked={editScope === "single"}
+                    onChange={() => setEditScope("single")}
+                  />
+                  <span>
+                    <strong>Only this movement</strong>
+                    <small>Changes this month only. Future months keep the current recurring amount and details.</small>
+                  </span>
+                </label>
+                <label className={editScope === "future" ? "scopeOption active" : "scopeOption"}>
+                  <input
+                    type="radio"
+                    name="editScope"
+                    value="future"
+                    checked={editScope === "future"}
+                    onChange={() => setEditScope("future")}
+                  />
+                  <span>
+                    <strong>This and future months</strong>
+                    <small>Changes this movement and updates the recurring rule from now on. Past months stay unchanged.</small>
+                  </span>
+                </label>
+              </div>
+            )}
+
             <label className="wide recurringToggle">
               <span>Recurring</span>
               <span className="checkLine">
                 <input
                   type="checkbox"
                   checked={repeatMonthly}
+                  disabled={Boolean(editingRecurringId && editScope === "single")}
                   onChange={(e) => setRepeatMonthly(e.target.checked)}
                 />
                 Recurring monthly expense
               </span>
+              {editingRecurringId && editScope === "single" && (
+                <small className="fieldHint">The recurring rule will not change when editing only this movement.</small>
+              )}
             </label>
 
-            {repeatMonthly && (
+            {repeatMonthly && (!editingRecurringId || editScope === "future") && (
               <>
                 <label>
                   Day of month
