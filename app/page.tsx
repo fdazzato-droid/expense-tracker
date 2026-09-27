@@ -37,6 +37,7 @@ type Transaction = {
   paymentMethod?: string;
   notes?: string;
   createdAt: string;
+  recurringId?: string;
 };
 
 const EXPENSE_CATEGORIES = [
@@ -138,6 +139,7 @@ export default function Home() {
   const [paymentMethod, setPaymentMethod] = useState("Card");
   const [notes, setNotes] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
   const [repeatMonthly, setRepeatMonthly] = useState(false);
   const [repeatDay, setRepeatDay] = useState("1");
   const [repeatEndDate, setRepeatEndDate] = useState("");
@@ -205,6 +207,7 @@ export default function Home() {
       paymentMethod: row.payment_method ?? undefined,
       notes: row.notes ?? undefined,
       createdAt: row.created_at,
+      recurringId: row.recurring_id ?? undefined,
     })));
 
     const { data: recurringData, error: recurringError } = await supabase
@@ -384,14 +387,21 @@ export default function Home() {
     setFxRate(String(t.currency === "USD" ? 1 : t.fxRate));
     setPaymentMethod(t.paymentMethod ?? "Card");
     setNotes(t.notes ?? "");
-    setRepeatMonthly(false);
-    setRepeatDay("1");
-    setRepeatEndDate("");
+
+    const recurring = t.recurringId
+      ? recurringTransactions.find((r) => r.id === t.recurringId)
+      : undefined;
+
+    setEditingRecurringId(recurring?.id ?? null);
+    setRepeatMonthly(Boolean(recurring));
+    setRepeatDay(String(recurring?.dayOfMonth ?? Number(t.date.slice(8, 10))));
+    setRepeatEndDate(recurring?.endDate ?? "");
     window.location.hash = "add";
   }
 
   function cancelEdit() {
     setEditingId(null);
+    setEditingRecurringId(null);
     setType("expense");
     setExpenseKind("variable");
     setDate(todayISO());
@@ -419,6 +429,71 @@ export default function Home() {
     if (!user || !isAllowedEmail(user.email)) return;
 
     if (editingId) {
+      let recurringId = editingRecurringId;
+
+      if (repeatMonthly) {
+        if (editingRecurringId) {
+          const { error: recurringError } = await supabase
+            .from("recurring_transactions")
+            .update({
+              type,
+              expense_kind: type === "expense" ? expenseKind : null,
+              category: type === "income" ? "Income" : category,
+              amount_original: numericAmount,
+              currency,
+              fx_rate: currency === "USD" ? 1 : numericFx,
+              payment_method: type === "expense" ? paymentMethod : null,
+              notes: notes.trim() || null,
+              day_of_month: Number(repeatDay),
+              end_date: repeatEndDate || null,
+              active: true,
+            })
+            .eq("id", editingRecurringId);
+
+          if (recurringError) {
+            setAuthMessage(recurringError.message);
+            return;
+          }
+        } else {
+          const { data: recurringRow, error: recurringError } = await supabase
+            .from("recurring_transactions")
+            .insert({
+              user_id: user.id,
+              type,
+              expense_kind: type === "expense" ? expenseKind : null,
+              category: type === "income" ? "Income" : category,
+              amount_original: numericAmount,
+              currency,
+              fx_rate: currency === "USD" ? 1 : numericFx,
+              payment_method: type === "expense" ? paymentMethod : null,
+              notes: notes.trim() || null,
+              day_of_month: Number(repeatDay),
+              start_date: date,
+              end_date: repeatEndDate || null,
+              active: true,
+            })
+            .select("id")
+            .single();
+
+          if (recurringError) {
+            setAuthMessage(recurringError.message);
+            return;
+          }
+          recurringId = recurringRow.id;
+        }
+      } else if (editingRecurringId) {
+        const { error: recurringError } = await supabase
+          .from("recurring_transactions")
+          .update({ active: false })
+          .eq("id", editingRecurringId);
+
+        if (recurringError) {
+          setAuthMessage(recurringError.message);
+          return;
+        }
+        recurringId = null;
+      }
+
       const { error } = await supabase
         .from("transactions")
         .update({
@@ -432,6 +507,7 @@ export default function Home() {
           amount_usd: Number(amountUSD.toFixed(2)),
           payment_method: type === "expense" ? paymentMethod : null,
           notes: notes.trim() || null,
+          recurring_id: recurringId,
         })
         .eq("id", editingId);
 
@@ -871,7 +947,7 @@ export default function Home() {
               </label>
             )}
 
-            {!editingId && <label className="wide recurringToggle">
+            <label className="wide recurringToggle">
               <span>Recurring</span>
               <span className="checkLine">
                 <input
@@ -881,9 +957,9 @@ export default function Home() {
                 />
                 Repeat every month
               </span>
-            </label>}
+            </label>
 
-            {!editingId && repeatMonthly && (
+            {repeatMonthly && (
               <>
                 <label>
                   Day of month
