@@ -172,6 +172,8 @@ export default function Home() {
   const [repeatEndDate, setRepeatEndDate] = useState("");
   const [savingMovement, setSavingMovement] = useState(false);
   const [movementMessage, setMovementMessage] = useState("");
+  const [automationOpen, setAutomationOpen] = useState(true);
+  const [activityOpen, setActivityOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -1703,14 +1705,24 @@ export default function Home() {
           </form>
         </section>
 
-        <section className="panel recurringPanel">
-          <div className="panelHead">
+        <section className="panel recurringPanel collapsiblePanel">
+          <button
+            type="button"
+            className="collapsibleHead"
+            onClick={() => setAutomationOpen((open) => !open)}
+            aria-expanded={automationOpen}
+          >
             <div>
               <p className="eyebrow">AUTOMATION</p>
               <h2>Recurring expenses & installments</h2>
             </div>
-            <span className="muted">{recurringTransactions.length} configured</span>
-          </div>
+            <div className="collapsibleMeta">
+              <span className="muted">{recurringTransactions.length} configured</span>
+              <span className="collapseIcon">{automationOpen ? "▾" : "▸"}</span>
+            </div>
+          </button>
+          {automationOpen && (
+            <div className="collapsibleBody">
 
           {recurringTransactions.length === 0 ? (
             <EmptyState text="Mark an expense as recurring to automate it every month." />
@@ -1741,6 +1753,8 @@ export default function Home() {
               ))}
             </div>
           )}
+            </div>
+          )}
         </section>
 
         <section className="panel accountPanel">
@@ -1766,14 +1780,24 @@ export default function Home() {
           {authMessage && <p className="authMessage">{authMessage}</p>}
         </section>
 
-        <section id="history" className="panel">
-          <div className="panelHead">
+        <section id="history" className="panel collapsiblePanel">
+          <button
+            type="button"
+            className="collapsibleHead"
+            onClick={() => setActivityOpen((open) => !open)}
+            aria-expanded={activityOpen}
+          >
             <div>
               <p className="eyebrow">ACTIVITY</p>
               <h2>Recent movements</h2>
             </div>
-            <span className="muted">{transactions.length} total</span>
-          </div>
+            <div className="collapsibleMeta">
+              <span className="muted">{transactions.length} total</span>
+              <span className="collapseIcon">{activityOpen ? "▾" : "▸"}</span>
+            </div>
+          </button>
+          {activityOpen && (
+            <div className="collapsibleBody">
           {transactions.length === 0 ? <EmptyState text="No movements yet." /> : (
             <div className="tableWrap">
               <table>
@@ -1803,6 +1827,8 @@ export default function Home() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
             </div>
           )}
         </section>
