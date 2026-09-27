@@ -876,3 +876,110 @@ body {
     align-items: flex-start;
   }
 }
+
+/* BI report layout */
+.reportHeader {
+  position: sticky;
+  top: 0;
+  z-index: 24;
+  margin: -10px -8px 14px;
+  padding: 10px 8px 10px;
+  background: rgba(244,246,248,.94);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(223,229,232,.85);
+}
+.reportHeader .topbar {
+  margin-bottom: 10px;
+}
+.dashboardTabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  background: #e9edef;
+  border-radius: 12px;
+  width: fit-content;
+  max-width: 100%;
+}
+.dashboardTab,
+.clearFiltersButton {
+  border: 0;
+  border-radius: 9px;
+  padding: 8px 12px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.dashboardTab.active {
+  background: white;
+  color: var(--ink);
+  box-shadow: 0 1px 5px rgba(20,40,50,.08);
+}
+.clearFiltersButton {
+  color: var(--accent);
+  margin-left: 4px;
+}
+.pieLegendButton {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.pieLegendButton:hover {
+  background: #f7f9fa;
+}
+.biDetailPanel {
+  min-height: 0;
+}
+.biTableWrap {
+  max-height: 430px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.biTable thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f8fafb;
+}
+.commitmentBadge {
+  display: inline-block;
+  padding: 4px 7px;
+  border-radius: 99px;
+  background: #eef3f4;
+  color: #4f626b;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+@media (min-width: 1100px) {
+  .metrics {
+    position: sticky;
+    top: 126px;
+    z-index: 10;
+    padding: 4px 0 10px;
+    background: var(--bg);
+  }
+  .trendChart {
+    height: 180px;
+  }
+}
+@media (max-width: 1000px) {
+  .reportHeader {
+    position: static;
+    margin: 0 0 14px;
+    padding: 0;
+    background: transparent;
+    backdrop-filter: none;
+    border-bottom: 0;
+  }
+  .dashboardTabs {
+    width: 100%;
+    overflow-x: auto;
+  }
+}
