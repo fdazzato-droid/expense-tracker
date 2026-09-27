@@ -172,8 +172,8 @@ export default function Home() {
   const [repeatEndDate, setRepeatEndDate] = useState("");
   const [savingMovement, setSavingMovement] = useState(false);
   const [movementMessage, setMovementMessage] = useState("");
-  const [automationOpen, setAutomationOpen] = useState(true);
-  const [activityOpen, setActivityOpen] = useState(false);
+  const [automationOpen, setAutomationOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(true);
 
   useEffect(() => {
     let active = true;
