@@ -135,6 +135,25 @@ function inclusiveMonthCount(startDate: string, endDate: string) {
   return Math.max(0, (ey - sy) * 12 + (em - sm) + 1);
 }
 
+function daysInMonth(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Date(year, monthNumber, 0).getDate();
+}
+
+function hasExtraMarker(notes?: string) {
+  return Boolean(notes?.toLowerCase().includes("[extra]"));
+}
+
+function stripExtraMarker(notes?: string) {
+  return (notes ?? "").replace(/\[extra\]/gi, "").replace(/\s{2,}/g, " ").trim();
+}
+
+function storedNotes(notes: string, extraordinary: boolean) {
+  const clean = stripExtraMarker(notes);
+  if (extraordinary) return clean ? `${clean} [extra]` : "[extra]";
+  return clean || null;
+}
+
 export default function Home() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [recurringTransactions, setRecurringTransactions] = useState<RecurringTransaction[]>([]);
@@ -164,6 +183,7 @@ export default function Home() {
   const [fxRate, setFxRate] = useState("40");
   const [paymentMethod, setPaymentMethod] = useState("Card");
   const [notes, setNotes] = useState("");
+  const [extraordinary, setExtraordinary] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingRecurringId, setEditingRecurringId] = useState<string | null>(null);
   const [editScope, setEditScope] = useState<"single" | "future">("single");
@@ -346,9 +366,9 @@ export default function Home() {
 
   function commitmentTypeForTransaction(t: Transaction) {
     if (t.type !== "expense") return "Income";
-    if (!t.recurringId) return "One-off";
+    if (!t.recurringId) return "Variable";
     const recurring = recurringTransactions.find((r) => r.id === t.recurringId);
-    return recurring?.endDate ? "Installments" : "Recurring ongoing";
+    return recurring?.endDate ? "Installments" : "Fixed";
   }
 
   const periodCurrent = useMemo(() => {
@@ -477,6 +497,99 @@ export default function Home() {
     return new Map(recurringTransactions.map((r) => [r.id, r]));
   }, [recurringTransactions]);
 
+  const budgetSummary = useMemo(() => {
+    const calc = (items: Transaction[], monthForTiming: string | null, annual = false) => {
+      const income = items
+        .filter((t) => t.type === "income")
+        .reduce((sum, t) => sum + t.amountUSD, 0);
+
+      let fixed = 0;
+      let installments = 0;
+      let variable = 0;
+      let extraordinaryVariable = 0;
+
+      items.filter((t) => t.type === "expense").forEach((t) => {
+        const kind = commitmentTypeForTransaction(t);
+        if (kind === "Fixed") fixed += t.amountUSD;
+        else if (kind === "Installments") installments += t.amountUSD;
+        else {
+          variable += t.amountUSD;
+          if (hasExtraMarker(t.notes)) extraordinaryVariable += t.amountUSD;
+        }
+      });
+
+      const committed = fixed + installments;
+      const actualExpenses = committed + variable;
+      const actualSavings = income - actualExpenses;
+      const actualSavingsRate = income > 0 ? (actualSavings / income) * 100 : 0;
+
+      if (annual || !monthForTiming) {
+        return {
+          income,
+          fixed,
+          installments,
+          committed,
+          variable,
+          extraordinaryVariable,
+          variablePace: 0,
+          actualExpenses,
+          actualSavings,
+          actualSavingsRate,
+          projectedVariable: variable,
+          projectedSavings: actualSavings,
+          projectedSavingsRate: actualSavingsRate,
+          elapsedPct: 100,
+          daysElapsed: 0,
+          totalDays: 0,
+          isCurrentMonth: false,
+        };
+      }
+
+      const totalDays = daysInMonth(monthForTiming);
+      const currentMonth = todayISO().slice(0, 7);
+      const isCurrentMonth = monthForTiming === currentMonth;
+      const isPastMonth = monthForTiming < currentMonth;
+      const todayDay = Number(todayISO().slice(8, 10));
+      const daysElapsed = isCurrentMonth
+        ? Math.min(todayDay, totalDays)
+        : isPastMonth
+          ? totalDays
+          : 1;
+      const pacedVariable = Math.max(0, variable - extraordinaryVariable);
+      const variablePace = daysElapsed > 0 ? pacedVariable / daysElapsed : 0;
+      const projectedVariable = isCurrentMonth
+        ? variablePace * totalDays + extraordinaryVariable
+        : variable;
+      const projectedSavings = income - committed - projectedVariable;
+      const projectedSavingsRate = income > 0 ? (projectedSavings / income) * 100 : 0;
+
+      return {
+        income,
+        fixed,
+        installments,
+        committed,
+        variable,
+        extraordinaryVariable,
+        variablePace,
+        actualExpenses,
+        actualSavings,
+        actualSavingsRate,
+        projectedVariable,
+        projectedSavings,
+        projectedSavingsRate,
+        elapsedPct: totalDays > 0 ? (daysElapsed / totalDays) * 100 : 0,
+        daysElapsed,
+        totalDays,
+        isCurrentMonth,
+      };
+    };
+
+    return {
+      now: calc(periodCurrent, view === "month" ? selectedMonth : null, view === "year"),
+      prev: calc(periodPrevious, view === "month" ? previousMonthKey(selectedMonth) : null, view === "year"),
+    };
+  }, [periodCurrent, periodPrevious, recurringTransactions, view, selectedMonth]);
+
   const spendingCommitments = useMemo(() => {
     let oneOff = 0;
     let recurringOngoing = 0;
@@ -499,7 +612,7 @@ export default function Home() {
   }, [current, recurringById]);
 
   const commitmentDetails = useMemo(() => {
-    const types = ["One-off", "Recurring ongoing", "Installments"] as const;
+    const types = ["Variable", "Fixed", "Installments"] as const;
 
     return types.map((name) => {
       const items = periodCurrent
@@ -629,7 +742,7 @@ export default function Home() {
   }
 
   function selectAllDashboardCommitments() {
-    setDashboardCommitments(["One-off", "Recurring ongoing", "Installments"]);
+    setDashboardCommitments(["Variable", "Fixed", "Installments"]);
   }
 
   function startEdit(t: Transaction) {
@@ -642,7 +755,8 @@ export default function Home() {
     setCurrency(t.currency);
     setFxRate(String(t.currency === "USD" ? 1 : t.fxRate));
     setPaymentMethod(t.paymentMethod ?? "Card");
-    setNotes(t.notes ?? "");
+    setExtraordinary(hasExtraMarker(t.notes));
+    setNotes(stripExtraMarker(t.notes));
 
     const recurring = t.recurringId
       ? recurringTransactions.find((r) => r.id === t.recurringId)
@@ -669,6 +783,7 @@ export default function Home() {
     setFxRate("40");
     setPaymentMethod("Card");
     setNotes("");
+    setExtraordinary(false);
     setRepeatMonthly(false);
     setRepeatDay("1");
     setRepeatEndDate("");
@@ -696,6 +811,9 @@ export default function Home() {
     }
 
     const amountUSD = currency === "USD" ? numericAmount : numericAmount / numericFx;
+    const notesForStorage = type === "expense"
+      ? storedNotes(notes, extraordinary)
+      : stripExtraMarker(notes) || null;
 
     if (!user || !isAllowedEmail(user.email)) {
       setMovementMessage("Tu sesión no está disponible. Volvé a iniciar sesión.");
@@ -723,7 +841,7 @@ export default function Home() {
                 currency,
                 fx_rate: currency === "USD" ? 1 : numericFx,
                 payment_method: type === "expense" ? paymentMethod : null,
-                notes: notes.trim() || null,
+                notes: notesForStorage,
                 day_of_month: Number(repeatDay),
                 end_date: repeatEndDate || null,
                 active: true,
@@ -764,7 +882,7 @@ export default function Home() {
             currency,
             fx_rate: currency === "USD" ? 1 : numericFx,
             payment_method: type === "expense" ? paymentMethod : null,
-            notes: notes.trim() || null,
+            notes: notesForStorage,
             day_of_month: Number(repeatDay),
             start_date: date,
             end_date: repeatEndDate || null,
@@ -794,7 +912,7 @@ export default function Home() {
           fx_rate: currency === "USD" ? 1 : numericFx,
           amount_usd: Number(amountUSD.toFixed(2)),
           payment_method: type === "expense" ? paymentMethod : null,
-          notes: notes.trim() || null,
+          notes: notesForStorage,
           recurring_id: recurringId,
         })
         .eq("id", editingId);
@@ -827,7 +945,7 @@ export default function Home() {
           currency,
           fx_rate: currency === "USD" ? 1 : numericFx,
           payment_method: type === "expense" ? paymentMethod : null,
-          notes: notes.trim() || null,
+          notes: notesForStorage,
           day_of_month: Number(repeatDay),
           start_date: date,
           end_date: repeatEndDate || null,
@@ -856,7 +974,7 @@ export default function Home() {
       fx_rate: currency === "USD" ? 1 : numericFx,
       amount_usd: Number(amountUSD.toFixed(2)),
       payment_method: type === "expense" ? paymentMethod : null,
-      notes: notes.trim() || null,
+      notes: notesForStorage,
       recurring_id: recurringId,
     });
 
@@ -869,6 +987,7 @@ export default function Home() {
     setAmount("");
     setDescription("");
     setNotes("");
+    setExtraordinary(false);
     setRepeatMonthly(false);
     setRepeatDay("1");
     setRepeatEndDate("");
@@ -1073,7 +1192,7 @@ export default function Home() {
                     <button type="button" onClick={selectAllDashboardCommitments}>Select all</button>
                   </div>
                   <div className="multiFilterOptions">
-                    {["One-off", "Recurring ongoing", "Installments"].map((c) => (
+                    {["Variable", "Fixed", "Installments"].map((c) => (
                       <label key={c} className="multiFilterOption">
                         <input
                           type="checkbox"
@@ -1128,10 +1247,32 @@ export default function Home() {
         </div>
 
         <section id="dashboard" className="metrics">
-          <MetricCard label="Income" value={usd(stats.now.income)} sub="Total income in USD" />
-          <MetricCard label="Expenses" value={usd(stats.now.expenses)} sub={stats.prev.expenses > 0 ? `${expenseChange >= 0 ? "+" : ""}${expenseChange.toFixed(1)}% vs previous period` : "No previous period data"} />
-          <MetricCard label="Savings" value={usd(stats.now.savings)} sub="Income minus expenses" />
-          <MetricCard label="Savings rate" value={pct(stats.now.savingsRate)} sub="Share of income saved" />
+          <MetricCard
+            label="Income"
+            value={usd(budgetSummary.now.income)}
+            sub={budgetSummary.prev.income > 0
+              ? `${budgetSummary.now.income - budgetSummary.prev.income >= 0 ? "+" : ""}${usd(budgetSummary.now.income - budgetSummary.prev.income)} vs previous period`
+              : "No previous period income"}
+          />
+          <MetricCard
+            label="Committed"
+            value={usd(budgetSummary.now.committed)}
+            sub={`${budgetSummary.now.income > 0 ? pct((budgetSummary.now.committed / budgetSummary.now.income) * 100) : "0.0%"} of income · Fixed ${usd(budgetSummary.now.fixed)} + Installments ${usd(budgetSummary.now.installments)}`}
+          />
+          <MetricCard
+            label="Variable spending"
+            value={usd(budgetSummary.now.variable)}
+            sub={view === "month"
+              ? `${usd(budgetSummary.now.variablePace)}/day pace${budgetSummary.now.extraordinaryVariable > 0 ? ` · ${usd(budgetSummary.now.extraordinaryVariable)} extraordinary` : ""}`
+              : "Actual variable spending"}
+          />
+          <MetricCard
+            label={view === "month" && budgetSummary.now.isCurrentMonth ? "Projected savings" : "Savings"}
+            value={usd(view === "month" && budgetSummary.now.isCurrentMonth ? budgetSummary.now.projectedSavings : budgetSummary.now.actualSavings)}
+            sub={view === "month" && budgetSummary.now.isCurrentMonth
+              ? `${pct(budgetSummary.now.projectedSavingsRate)} projected · Actual to date: ${pct(budgetSummary.now.actualSavingsRate)} · month is ${pct(budgetSummary.now.elapsedPct)} elapsed`
+              : `${pct(budgetSummary.now.actualSavingsRate)} savings rate`}
+          />
         </section>
 
         <section className={dashboardTab === "overview" ? "gridTwo biView" : "biHidden"}>
@@ -1240,8 +1381,8 @@ export default function Home() {
             <p className="eyebrow">SPENDING STRUCTURE</p>
             <h2>Spending commitments</h2>
             <div className="commitmentNumbers">
-              <div><span>One-off</span><strong>{usd(spendingCommitments.oneOff)}</strong></div>
-              <div><span>Recurring ongoing</span><strong>{usd(spendingCommitments.recurringOngoing)}</strong></div>
+              <div><span>Variable</span><strong>{usd(spendingCommitments.oneOff)}</strong></div>
+              <div><span>Fixed</span><strong>{usd(spendingCommitments.recurringOngoing)}</strong></div>
               <div><span>Installments</span><strong>{usd(spendingCommitments.installments)}</strong></div>
             </div>
             <div className="stacked commitmentStack">
@@ -1316,9 +1457,9 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="savingsDetails">
-                  <div className="summaryLine"><span>Recurring ongoing</span><strong>{usd(spendingCommitments.recurringOngoing)}</strong></div>
+                  <div className="summaryLine"><span>Fixed</span><strong>{usd(spendingCommitments.recurringOngoing)}</strong></div>
                   <div className="summaryLine"><span>Installments</span><strong>{usd(spendingCommitments.installments)}</strong></div>
-                  <div className="summaryLine"><span>One-off</span><strong>{usd(spendingCommitments.oneOff)}</strong></div>
+                  <div className="summaryLine"><span>Variable</span><strong>{usd(spendingCommitments.oneOff)}</strong></div>
                   <div className="summaryLine highlight"><span>Future installment balance</span><strong>{usd(totalInstallmentBalance)}</strong></div>
                 </div>
               </div>
@@ -1693,6 +1834,20 @@ export default function Home() {
               </>
             )}
 
+            {type === "expense" && (
+              <label className="wide recurringToggle">
+                <span>Budget treatment</span>
+                <span className="checkLine">
+                  <input
+                    type="checkbox"
+                    checked={extraordinary}
+                    onChange={(e) => setExtraordinary(e.target.checked)}
+                  />
+                  Extraordinary expense (exclude from daily pace)
+                </span>
+              </label>
+            )}
+
             <label className="wide">
               Notes
               <input placeholder="Optional" value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -1750,7 +1905,7 @@ export default function Home() {
                       {r.category} · {usd(r.currency === "USD" ? r.amountOriginal : r.amountOriginal / r.fxRate)} · day {r.dayOfMonth} each month
                     </span>
                     <small>
-                      {r.endDate ? "Installment" : "Recurring ongoing"} · starts {r.startDate}
+                      {r.endDate ? "Installment" : "Fixed"} · starts {r.startDate}
                       {r.endDate ? ` · ends ${r.endDate}` : " · no end date"}
                     </small>
                   </div>
