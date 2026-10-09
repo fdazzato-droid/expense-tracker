@@ -63,6 +63,16 @@ const EXPENSE_CATEGORIES = [
 ];
 
 const PAYMENT_METHODS = ["Card", "Cash", "Bank Transfer", "Other"];
+
+const CATEGORY_BUDGETS: { name: string; categories: string[]; limit: number }[] = [
+  { name: "Groceries", categories: ["Groceries"], limit: 450 },
+  { name: "Going out", categories: ["Dining Out", "Meetings with Friends"], limit: 350 },
+  { name: "Health (variable)", categories: ["Health"], limit: 100 },
+  { name: "Dog", categories: ["Dog Expenditures"], limit: 40 },
+  { name: "Home & misc", categories: ["Miscellaneous", "Home / Furniture"], limit: 60 },
+  { name: "Personal, clothing, gifts", categories: ["Personal Care", "Clothing", "Gifts / Donations"], limit: 30 },
+];
+
 const ALLOWED_EMAILS = ["fdazzato@gmail.com", "mmazzatopaz@gmail.com"] as const;
 
 function isAllowedEmail(email?: string | null) {
@@ -180,6 +190,31 @@ export default function Home() {
   const [movementMessage, setMovementMessage] = useState("");
   const [automationOpen, setAutomationOpen] = useState(false);
   const [activityOpen, setActivityOpen] = useState(true);
+  const [savingsTarget, setSavingsTarget] = useState(30);
+  const [savingsTargetLoaded, setSavingsTargetLoaded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("finance-by-franco-savings-target");
+      const parsed = saved ? Number(saved) : NaN;
+      if (Number.isFinite(parsed) && parsed >= 10 && parsed <= 50) {
+        setSavingsTarget(parsed);
+      }
+    } catch {
+      // localStorage may be unavailable in private browsing or restricted contexts.
+    } finally {
+      setSavingsTargetLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!savingsTargetLoaded) return;
+    try {
+      window.localStorage.setItem("finance-by-franco-savings-target", String(savingsTarget));
+    } catch {
+      // Keep the slider usable even if localStorage cannot persist it.
+    }
+  }, [savingsTarget, savingsTargetLoaded]);
 
   useEffect(() => {
     let active = true;
@@ -554,6 +589,94 @@ export default function Home() {
       prev: calc(periodPrevious, view === "month" ? previousMonthKey(selectedMonth) : null, view === "year"),
     };
   }, [periodCurrent, periodPrevious, recurringTransactions, view, selectedMonth]);
+
+  const allocationComparison = useMemo(() => {
+    const build = (summary: typeof budgetSummary.now, projected: boolean) => {
+      const variableAmount = projected ? summary.projectedVariable : summary.variable;
+      const savingsAmount = projected ? summary.projectedSavings : summary.actualSavings;
+      return [
+        { name: "Fixed", amount: summary.fixed, color: "#284653" },
+        { name: "Installments", amount: summary.installments, color: "#d8a64b" },
+        { name: projected ? "Variable (projected)" : "Variable", amount: variableAmount, color: "#77a99f" },
+        { name: projected ? "Savings (projected)" : "Savings", amount: Math.max(0, savingsAmount), color: "#4f79c6" },
+      ];
+    };
+
+    return {
+      now: build(budgetSummary.now, view === "month" && budgetSummary.now.isCurrentMonth),
+      prev: build(budgetSummary.prev, false),
+    };
+  }, [budgetSummary, view]);
+
+  const categoryComparison = useMemo(() => {
+    const totals = (items: Transaction[]) => {
+      const map = new Map<string, number>();
+      items
+        .filter((t) => {
+          if (t.type !== "expense") return false;
+          return dashboardCommitments.length === 0 ||
+            dashboardCommitments.includes(commitmentTypeForTransaction(t));
+        })
+        .forEach((t) => map.set(t.category, (map.get(t.category) || 0) + t.amountUSD));
+      return map;
+    };
+
+    const now = totals(periodCurrent);
+    const prev = totals(periodPrevious);
+    const names = new Set([...now.keys(), ...prev.keys()]);
+
+    return [...names]
+      .filter((name) => dashboardCategories.length === 0 || dashboardCategories.includes(name))
+      .map((name) => ({
+        name,
+        now: now.get(name) || 0,
+        prev: prev.get(name) || 0,
+      }))
+      .sort((a, b) => b.now - a.now || b.prev - a.prev);
+  }, [periodCurrent, periodPrevious, dashboardCategories, dashboardCommitments, recurringTransactions]);
+
+  const categoryBudgetRows = useMemo(() => {
+    const variableExpenses = periodCurrent.filter(
+      (t) => t.type === "expense" && commitmentTypeForTransaction(t) === "Variable"
+    );
+    const elapsedFraction = Math.max(budgetSummary.now.elapsedPct / 100, 0.0001);
+
+    return CATEGORY_BUDGETS.map((budget) => {
+      const spent = variableExpenses
+        .filter((t) => budget.categories.includes(t.category))
+        .reduce((sum, t) => sum + t.amountUSD, 0);
+      const usage = budget.limit > 0 ? spent / budget.limit : 0;
+      const pace = usage / elapsedFraction;
+
+      let status: "On track" | "Fast" | "Over pace" | "Over budget" = "On track";
+      if (spent > budget.limit) status = "Over budget";
+      else if (pace > 1.35) status = "Over pace";
+      else if (pace > 1.05) status = "Fast";
+
+      return { ...budget, spent, usage, pace, status };
+    });
+  }, [periodCurrent, recurringTransactions, budgetSummary.now.elapsedPct]);
+
+  const savingsTargetSummary = useMemo(() => {
+    const targetAmount = budgetSummary.now.income * (savingsTarget / 100);
+    const variableRemaining =
+      budgetSummary.now.income * (1 - savingsTarget / 100) -
+      budgetSummary.now.committed -
+      budgetSummary.now.variable;
+    const daysRemaining = Math.max(
+      budgetSummary.now.totalDays - budgetSummary.now.daysElapsed,
+      0
+    );
+    const perDay = daysRemaining > 0 ? variableRemaining / daysRemaining : variableRemaining;
+
+    return {
+      targetAmount,
+      variableRemaining,
+      daysRemaining,
+      perDay,
+      paceWorks: perDay >= budgetSummary.now.variablePace,
+    };
+  }, [budgetSummary, savingsTarget]);
 
   const spendingCommitments = useMemo(() => {
     let oneOff = 0;
@@ -994,7 +1117,6 @@ export default function Home() {
     await loadTransactions();
   }
 
-  const maxCategory = categoryBreakdown[0]?.[1] || 1;
   const maxTrend = Math.max(...monthlyTrend.flatMap(([, v]) => [v.expenses, v.income]), 1);
 
   if (authLoading) {
@@ -1236,63 +1358,188 @@ export default function Home() {
           />
         </section>
 
-        <section className={dashboardTab === "overview" ? "gridTwo biView" : "biHidden"}>
-          <div className="panel visualPanel">
+        <section className={dashboardTab === "overview" ? "panel allocationPanel biView" : "biHidden"}>
+          <div className="panelHead">
+            <div>
+              <p className="eyebrow">ALLOCATION</p>
+              <h2>Where each dollar goes</h2>
+            </div>
+            <span className="muted">Share of income</span>
+          </div>
+
+          {budgetSummary.now.income <= 0 ? (
+            <EmptyState text="Add income to compare how each dollar is allocated." />
+          ) : (
+            <div className="allocationCompare">
+              {[
+                {
+                  label: view === "month" ? selectedMonth : selectedYear,
+                  income: budgetSummary.now.income,
+                  segments: allocationComparison.now,
+                },
+                {
+                  label: view === "month" ? previousMonthKey(selectedMonth) : String(Number(selectedYear) - 1),
+                  income: budgetSummary.prev.income,
+                  segments: allocationComparison.prev,
+                },
+              ].map((row) => (
+                <div className="allocationRow" key={row.label}>
+                  <div className="allocationRowHead">
+                    <strong>{row.label}</strong>
+                    <span>{usd(row.income)} income</span>
+                  </div>
+                  <div className="allocationStack" aria-label={`Allocation for ${row.label}`}>
+                    {row.segments.map((segment) => {
+                      const percent = row.income > 0 ? (segment.amount / row.income) * 100 : 0;
+                      return (
+                        <div
+                          key={segment.name}
+                          className="allocationSegment"
+                          style={{ width: `${Math.max(0, percent)}%`, background: segment.color }}
+                          title={`${segment.name}: ${usd(segment.amount)} · ${pct(percent)} of income`}
+                        />
+                      );
+                    })}
+                  </div>
+                  <div className="allocationLegend">
+                    {row.segments.map((segment) => {
+                      const percent = row.income > 0 ? (segment.amount / row.income) * 100 : 0;
+                      return (
+                        <span key={segment.name}>
+                          <i style={{ background: segment.color }} />
+                          {segment.name} {usd(segment.amount)} · {pct(percent)}
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className={dashboardTab === "overview" ? "panel categoryComparePanel biView" : "biHidden"}>
+          <div className="panelHead">
+            <div>
+              <p className="eyebrow">SPENDING</p>
+              <h2>Where your money goes</h2>
+            </div>
+            <span className="muted">Current vs previous period</span>
+          </div>
+          {categoryComparison.length === 0 ? (
+            <EmptyState text="Add expenses to compare category spending." />
+          ) : (
+            <div className="categoryCompareList">
+              {categoryComparison.map((item) => {
+                const scale = Math.max(
+                  ...categoryComparison.flatMap((row) => [row.now, row.prev]),
+                  1
+                );
+                const variation = item.prev > 0
+                  ? ((item.now - item.prev) / item.prev) * 100
+                  : null;
+                return (
+                  <button
+                    type="button"
+                    className="categoryCompareRow"
+                    key={item.name}
+                    onClick={() => {
+                      setDashboardCategories([item.name]);
+                      setDashboardTab("details");
+                    }}
+                  >
+                    <div className="categoryCompareHead">
+                      <strong>{item.name}</strong>
+                      <span>
+                        {usd(item.now)}
+                        <small className={variation !== null && variation > 0 ? "variationUp" : "variationDown"}>
+                          {variation === null
+                            ? "new"
+                            : `${variation >= 0 ? "+" : ""}${variation.toFixed(1)}%`}
+                        </small>
+                      </span>
+                    </div>
+                    <div className="comparisonTrack">
+                      <div className="comparisonCurrent" style={{ width: `${Math.max(item.now > 0 ? 3 : 0, (item.now / scale) * 100)}%` }} />
+                      <div className="comparisonPrevious" style={{ width: `${Math.max(item.prev > 0 ? 2 : 0, (item.prev / scale) * 100)}%` }} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {view === "month" && (
+          <section className={dashboardTab === "overview" ? "panel budgetPanel biView" : "biHidden"}>
             <div className="panelHead">
               <div>
-                <p className="eyebrow">SPENDING</p>
-                <h2>Where your money goes</h2>
+                <p className="eyebrow">VARIABLE BUDGETS</p>
+                <h2>Category budgets</h2>
               </div>
-              <strong>{usd(
-                (dashboardCategories.length === 0
-                  ? categoryBreakdown
-                  : categoryBreakdown.filter(([name]) => dashboardCategories.includes(name))
-                ).reduce((sum, [, value]) => sum + value, 0)
-              )}</strong>
+              <span className="muted">Variable spending only</span>
             </div>
-            {(dashboardCategories.length === 0
-              ? categoryBreakdown
-              : categoryBreakdown.filter(([name]) => dashboardCategories.includes(name))
-            ).length === 0 ? (
-              <EmptyState text="Add your first expense to see the breakdown." />
-            ) : (
-              <div className="bars">
-                {(dashboardCategories.length === 0
-                  ? categoryBreakdown
-                  : categoryBreakdown.filter(([name]) => dashboardCategories.includes(name))
-                ).map(([name, value]) => (
-                  <div className="barRow" key={name}>
-                    <div className="barLabel"><span>{name}</span><strong>{usd(value)}</strong></div>
-                    <div className="barTrack"><div className="barFill" style={{ width: `${Math.max(4, (value / maxCategory) * 100)}%` }} /></div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="panel">
-            <p className="eyebrow">SPENDING STRUCTURE</p>
-            <h2>Spending commitments</h2>
-            <div className="commitmentNumbers">
-              <div><span>Variable</span><strong>{usd(spendingCommitments.oneOff)}</strong></div>
-              <div><span>Fixed</span><strong>{usd(spendingCommitments.recurringOngoing)}</strong></div>
-              <div><span>Installments</span><strong>{usd(spendingCommitments.installments)}</strong></div>
+            <div className="tableWrap">
+              <table className="budgetTable">
+                <thead>
+                  <tr><th>Budget</th><th>Spent</th><th>Limit</th><th>Usage</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                  {categoryBudgetRows.map((row) => (
+                    <tr key={row.name}>
+                      <td><strong>{row.name}</strong></td>
+                      <td>{usd(row.spent)}</td>
+                      <td>{usd(row.limit)}</td>
+                      <td>
+                        <div className="budgetUsage">
+                          <div className="barTrack">
+                            <div className="barFill" style={{ width: `${Math.min(100, row.usage * 100)}%` }} />
+                          </div>
+                          <small>{pct(row.usage * 100)}</small>
+                        </div>
+                      </td>
+                      <td><span className={`budgetStatus ${row.status.toLowerCase().replaceAll(" ", "-")}`}>{row.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <div className="stacked commitmentStack">
-              <div style={{ width: `${stats.now.expenses ? (spendingCommitments.recurringOngoing / stats.now.expenses) * 100 : 0}%` }} />
-              <div style={{ width: `${stats.now.expenses ? (spendingCommitments.installments / stats.now.expenses) * 100 : 0}%` }} />
-              <div style={{ width: `${stats.now.expenses ? (spendingCommitments.oneOff / stats.now.expenses) * 100 : 0}%` }} />
-            </div>
-            <div className="insight">
-              <span className="insightIcon">↗</span>
+            <p className="budgetHint">By today you should have used {pct(budgetSummary.now.elapsedPct)} of each limit.</p>
+          </section>
+        )}
+
+        {view === "month" && budgetSummary.now.isCurrentMonth && (
+          <section className={dashboardTab === "overview" ? "panel savingsTargetPanel biView" : "biHidden"}>
+            <div className="panelHead">
               <div>
-                <strong>Installment balance</strong>
-                <p>{installmentSummary.length > 0
-                  ? `${usd(totalInstallmentBalance)} remains across ${installmentSummary.length} active or historical installment plan${installmentSummary.length === 1 ? "" : "s"}.`
-                  : "No installment plans with an end date are configured."}</p>
+                <p className="eyebrow">GOAL</p>
+                <h2>Savings target</h2>
+              </div>
+              <strong>{savingsTarget}%</strong>
+            </div>
+            <label className="targetSlider">
+              <span>Target savings rate</span>
+              <input
+                type="range"
+                min="10"
+                max="50"
+                step="1"
+                value={savingsTarget}
+                onChange={(e) => setSavingsTarget(Number(e.target.value))}
+              />
+              <div><span>10%</span><span>50%</span></div>
+            </label>
+            <div className="savingsTargetGrid">
+              <div><span>Savings goal</span><strong>{usd(savingsTargetSummary.targetAmount)}</strong></div>
+              <div><span>Variable left this month</span><strong>{usd(savingsTargetSummary.variableRemaining)}</strong></div>
+              <div className={savingsTargetSummary.paceWorks ? "paceGood" : "paceBad"}>
+                <span>Available per remaining day</span>
+                <strong>{usd(savingsTargetSummary.perDay)}</strong>
+                <small>{savingsTargetSummary.daysRemaining} days left · current pace {usd(budgetSummary.now.variablePace)}/day</small>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         <section className={dashboardTab === "commitments" ? "panel commitmentDetailsPanel biView" : "biHidden"}>
           <div className="panelHead">
