@@ -63,19 +63,6 @@ const EXPENSE_CATEGORIES = [
 ];
 
 const PAYMENT_METHODS = ["Card", "Cash", "Bank Transfer", "Other"];
-const PIE_COLORS = ["#146c5b", "#284653", "#77a99f", "#d8a64b", "#7d8fa3", "#b7795f", "#b9c5cb"];
-
-function pieGradient(items: { value: number; color: string }[]) {
-  const total = items.reduce((sum, item) => sum + item.value, 0);
-  if (total <= 0) return "#eef1f3";
-  let cursor = 0;
-  return `conic-gradient(${items.map((item) => {
-    const start = cursor;
-    cursor += (item.value / total) * 100;
-    return `${item.color} ${start}% ${cursor}%`;
-  }).join(", ")})`;
-}
-
 const ALLOWED_EMAILS = ["fdazzato@gmail.com", "mmazzatopaz@gmail.com"] as const;
 
 function isAllowedEmail(email?: string | null) {
@@ -167,7 +154,6 @@ export default function Home() {
   const [view, setView] = useState<"month" | "year">("month");
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
   const [selectedYear, setSelectedYear] = useState(todayISO().slice(0, 4));
-  const [spendingView, setSpendingView] = useState<"bars" | "pie">("pie");
   const [dashboardTab, setDashboardTab] = useState<"overview" | "commitments" | "details">("overview");
   const [dashboardCategories, setDashboardCategories] = useState<string[]>([]);
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
@@ -471,27 +457,6 @@ export default function Home() {
       }))
       .sort((a, b) => b.total - a.total);
   }, [periodCurrent, dashboardCategories, dashboardCommitments, recurringTransactions]);
-
-  const pieCategories = useMemo(() => {
-    const top = categoryBreakdown.slice(0, 6);
-    const remainder = categoryBreakdown.slice(6).reduce((sum, [, value]) => sum + value, 0);
-    const items = remainder > 0 ? [...top, ["Other categories", remainder] as [string, number]] : top;
-    return items.map(([name, value], index) => ({
-      name,
-      value,
-      color: PIE_COLORS[index % PIE_COLORS.length],
-    }));
-  }, [categoryBreakdown]);
-
-  const savingsAllocation = useMemo(() => {
-    if (stats.now.income <= 0) return [];
-    const spent = Math.min(stats.now.expenses, stats.now.income);
-    const saved = Math.max(stats.now.savings, 0);
-    return [
-      { name: "Spent", value: spent, color: "#284653" },
-      { name: "Saved", value: saved, color: "#77a99f" },
-    ].filter((item) => item.value > 0);
-  }, [stats.now.income, stats.now.expenses, stats.now.savings]);
 
   const recurringById = useMemo(() => {
     return new Map(recurringTransactions.map((r) => [r.id, r]));
@@ -1029,10 +994,6 @@ export default function Home() {
     await loadTransactions();
   }
 
-  const expenseChange = stats.prev.expenses > 0
-    ? ((stats.now.expenses - stats.prev.expenses) / stats.prev.expenses) * 100
-    : 0;
-
   const maxCategory = categoryBreakdown[0]?.[1] || 1;
   const maxTrend = Math.max(...monthlyTrend.flatMap(([, v]) => [v.expenses, v.income]), 1);
 
@@ -1282,92 +1243,24 @@ export default function Home() {
                 <p className="eyebrow">SPENDING</p>
                 <h2>Where your money goes</h2>
               </div>
-              <div className="panelHeadActions">
-                <strong>{usd(
-                  dashboardCategories.length === 0
-                    ? categoryBreakdown.reduce((sum, [, value]) => sum + value, 0)
-                    : stats.now.expenses
-                )}</strong>
-                <div className="viewToggle">
-                  <button className={spendingView === "pie" ? "miniSeg active" : "miniSeg"} onClick={() => setSpendingView("pie")}>Pie</button>
-                  <button className={spendingView === "bars" ? "miniSeg active" : "miniSeg"} onClick={() => setSpendingView("bars")}>Bars</button>
-                </div>
-              </div>
+              <strong>{usd(
+                (dashboardCategories.length === 0
+                  ? categoryBreakdown
+                  : categoryBreakdown.filter(([name]) => dashboardCategories.includes(name))
+                ).reduce((sum, [, value]) => sum + value, 0)
+              )}</strong>
             </div>
             {(dashboardCategories.length === 0
               ? categoryBreakdown
               : categoryBreakdown.filter(([name]) => dashboardCategories.includes(name))
             ).length === 0 ? (
               <EmptyState text="Add your first expense to see the breakdown." />
-            ) : spendingView === "pie" ? (
-              <div className="pieLayout">
-                <div className="donutWrap">
-                  <div className="donut" style={{ background: pieGradient(
-                    dashboardCategories.length === 0
-                      ? pieCategories
-                      : categoryBreakdown
-                          .filter(([name]) => dashboardCategories.includes(name))
-                          .map(([name, value], index) => ({
-                            name,
-                            value,
-                            color: PIE_COLORS[index % PIE_COLORS.length],
-                          }))
-                  ) }}>
-                    <div className="donutCenter">
-                      <span>Expenses</span>
-                      <strong>{usd(
-                        dashboardCategories.length === 0
-                          ? categoryBreakdown.reduce((sum, [, value]) => sum + value, 0)
-                          : stats.now.expenses
-                      )}</strong>
-                    </div>
-                  </div>
-                </div>
-                <div className="pieLegend">
-                  {(dashboardCategories.length === 0
-                    ? pieCategories
-                    : categoryBreakdown
-                        .filter(([name]) => dashboardCategories.includes(name))
-                        .map(([name, value], index) => ({
-                          name,
-                          value,
-                          color: PIE_COLORS[index % PIE_COLORS.length],
-                        }))
-                  ).map((item) => (
-                    <button
-                      type="button"
-                      className="pieLegendRow pieLegendButton"
-                      key={item.name}
-                      onClick={() => {
-                        if (EXPENSE_CATEGORIES.includes(item.name)) {
-                          setDashboardCategories([item.name]);
-                          setDashboardTab("details");
-                        }
-                      }}
-                    >
-                      <span className="legendSwatch" style={{ background: item.color }} />
-                      <div>
-                        <strong>{item.name}</strong>
-                        <small>{
-                          pct((item.value / Math.max(
-                            dashboardCategories.length === 0
-                              ? categoryBreakdown.reduce((sum, [, value]) => sum + value, 0)
-                              : stats.now.expenses,
-                            1
-                          )) * 100)
-                        }</small>
-                      </div>
-                      <span>{usd(item.value)}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
             ) : (
               <div className="bars">
                 {(dashboardCategories.length === 0
                   ? categoryBreakdown
                   : categoryBreakdown.filter(([name]) => dashboardCategories.includes(name))
-                ).slice(0, 8).map(([name, value]) => (
+                ).map(([name, value]) => (
                   <div className="barRow" key={name}>
                     <div className="barLabel"><span>{name}</span><strong>{usd(value)}</strong></div>
                     <div className="barTrack"><div className="barFill" style={{ width: `${Math.max(4, (value / maxCategory) * 100)}%` }} /></div>
@@ -1376,7 +1269,6 @@ export default function Home() {
               </div>
             )}
           </div>
-
           <div className="panel">
             <p className="eyebrow">SPENDING STRUCTURE</p>
             <h2>Spending commitments</h2>
@@ -1399,71 +1291,6 @@ export default function Home() {
                   : "No installment plans with an end date are configured."}</p>
               </div>
             </div>
-          </div>
-        </section>
-
-        <section className={dashboardTab === "overview" ? "gridTwo insightGrid biView" : "biHidden"}>
-          <div className="panel visualPanel">
-            <div className="panelHead">
-              <div>
-                <p className="eyebrow">SAVINGS</p>
-                <h2>Income allocation</h2>
-              </div>
-              <strong>{pct(stats.now.savingsRate)}</strong>
-            </div>
-            {stats.now.income <= 0 ? (
-              <EmptyState text="Add income to visualize savings." />
-            ) : (
-              <div className="pieLayout compactPie">
-                <div className="donutWrap">
-                  <div className="donut savingsDonut" style={{ background: pieGradient(savingsAllocation) }}>
-                    <div className="donutCenter">
-                      <span>Saved</span>
-                      <strong>{usd(Math.max(stats.now.savings, 0))}</strong>
-                    </div>
-                  </div>
-                </div>
-                <div className="savingsDetails">
-                  <div className="summaryLine"><span>Income</span><strong>{usd(stats.now.income)}</strong></div>
-                  <div className="summaryLine"><span>Expenses</span><strong>{usd(stats.now.expenses)}</strong></div>
-                  <div className="summaryLine highlight"><span>Net savings</span><strong>{usd(stats.now.savings)}</strong></div>
-                  {stats.now.savings < 0 && <p className="overspendNote">Expenses exceed income by {usd(Math.abs(stats.now.savings))}.</p>}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="panel visualPanel">
-            <div className="panelHead">
-              <div>
-                <p className="eyebrow">EXPENSE MIX</p>
-                <h2>Commitment mix</h2>
-              </div>
-            </div>
-            {stats.now.expenses <= 0 ? (
-              <EmptyState text="Add expenses to visualize the mix." />
-            ) : (
-              <div className="pieLayout compactPie">
-                <div className="donutWrap">
-                  <div className="donut smallDonut" style={{ background: pieGradient([
-                    { value: spendingCommitments.recurringOngoing, color: "#284653" },
-                    { value: spendingCommitments.installments, color: "#d8a64b" },
-                    { value: spendingCommitments.oneOff, color: "#77a99f" },
-                  ]) }}>
-                    <div className="donutCenter">
-                      <span>Total</span>
-                      <strong>{usd(stats.now.expenses)}</strong>
-                    </div>
-                  </div>
-                </div>
-                <div className="savingsDetails">
-                  <div className="summaryLine"><span>Fixed</span><strong>{usd(spendingCommitments.recurringOngoing)}</strong></div>
-                  <div className="summaryLine"><span>Installments</span><strong>{usd(spendingCommitments.installments)}</strong></div>
-                  <div className="summaryLine"><span>Variable</span><strong>{usd(spendingCommitments.oneOff)}</strong></div>
-                  <div className="summaryLine highlight"><span>Future installment balance</span><strong>{usd(totalInstallmentBalance)}</strong></div>
-                </div>
-              </div>
-            )}
           </div>
         </section>
 
@@ -1668,7 +1495,7 @@ export default function Home() {
           )}
         </section>
 
-        <section className={dashboardTab === "overview" ? "panel trendPanel biView" : "biHidden"}>
+        <section className={dashboardTab === "overview" && monthlyTrend.length >= 3 ? "panel trendPanel biView" : "biHidden"}>
           <div className="panelHead">
             <div>
               <p className="eyebrow">TREND</p>
