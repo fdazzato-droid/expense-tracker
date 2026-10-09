@@ -176,7 +176,7 @@ export default function Home() {
   const [view, setView] = useState<"month" | "year">("month");
   const [selectedMonth, setSelectedMonth] = useState(todayISO().slice(0, 7));
   const [selectedYear, setSelectedYear] = useState(todayISO().slice(0, 4));
-  const [dashboardTab, setDashboardTab] = useState<"overview" | "commitments" | "details">("overview");
+  const [dashboardTab, setDashboardTab] = useState<"overview" | "commitments" | "details" | "movements" | "account">("overview");
   const [dashboardCategories, setDashboardCategories] = useState<string[]>([]);
   const [categoryFilterOpen, setCategoryFilterOpen] = useState(false);
   const [dashboardCommitments, setDashboardCommitments] = useState<string[]>([]);
@@ -204,6 +204,7 @@ export default function Home() {
   const [activityOpen, setActivityOpen] = useState(true);
   const [savingsTarget, setSavingsTarget] = useState(30);
   const [savingsTargetLoaded, setSavingsTargetLoaded] = useState(false);
+  const [showAllMovements, setShowAllMovements] = useState(false);
 
   useEffect(() => {
     try {
@@ -905,7 +906,8 @@ export default function Home() {
     setRepeatMonthly(Boolean(recurring));
     setRepeatDay(String(recurring?.dayOfMonth ?? Number(t.date.slice(8, 10))));
     setRepeatEndDate(recurring?.endDate ?? "");
-    window.location.hash = "add";
+    setDashboardTab("movements");
+    window.setTimeout(() => document.getElementById("add")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
   }
 
   function cancelEdit() {
@@ -1186,7 +1188,7 @@ export default function Home() {
             type="password"
             autoComplete="new-password"
             minLength={8}
-            placeholder="Nueva contraseña"
+            placeholder="New password"
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             required
@@ -1245,7 +1247,8 @@ export default function Home() {
           <button className={dashboardTab === "overview" ? "navItem navButton active" : "navItem navButton"} onClick={() => setDashboardTab("overview")}>Overview</button>
           <button className={dashboardTab === "commitments" ? "navItem navButton active" : "navItem navButton"} onClick={() => setDashboardTab("commitments")}>Commitments</button>
           <button className={dashboardTab === "details" ? "navItem navButton active" : "navItem navButton"} onClick={() => setDashboardTab("details")}>Details</button>
-          <a href="#add" className="navItem">Add movement</a>
+          <button className={dashboardTab === "movements" ? "navItem navButton active" : "navItem navButton"} onClick={() => setDashboardTab("movements")}>Movements</button>
+          <button className={dashboardTab === "account" ? "navItem navButton active" : "navItem navButton"} onClick={() => setDashboardTab("account")}>Account</button>
         </nav>
         <div className="sidebarFoot accountFoot">
           <span className="statusDot online" />
@@ -1259,7 +1262,7 @@ export default function Home() {
           <div>
             <p className="eyebrow">YOUR FINANCES</p>
             <h1>Dashboard</h1>
-            {(dashboardCategories.length > 0 || dashboardCommitments.length > 0) && (
+            {["overview", "commitments", "details"].includes(dashboardTab) && (dashboardCategories.length > 0 || dashboardCommitments.length > 0) && (
               <p className="filterContext">
                 Filtered by {
                   [
@@ -1270,6 +1273,7 @@ export default function Home() {
               </p>
             )}
           </div>
+          {["overview", "commitments", "details"].includes(dashboardTab) && (
           <div className="periodControls">
             <div className="multiFilter">
               <button
@@ -1347,6 +1351,7 @@ export default function Home() {
               <input type="number" min="2020" max="2100" value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} />
             )}
           </div>
+          )}
         </header>
 
         <div className="dashboardTabs" role="tablist" aria-label="Dashboard views">
@@ -1371,7 +1376,21 @@ export default function Home() {
           >
             Details
           </button>
-          {(dashboardCategories.length > 0 || dashboardCommitments.length > 0) && (
+          <button
+            type="button"
+            className={dashboardTab === "movements" ? "dashboardTab active" : "dashboardTab"}
+            onClick={() => setDashboardTab("movements")}
+          >
+            Movements
+          </button>
+          <button
+            type="button"
+            className={dashboardTab === "account" ? "dashboardTab active" : "dashboardTab"}
+            onClick={() => setDashboardTab("account")}
+          >
+            Account
+          </button>
+          {["overview", "commitments", "details"].includes(dashboardTab) && (dashboardCategories.length > 0 || dashboardCommitments.length > 0) && (
             <button type="button" className="clearFiltersButton" onClick={clearAllDashboardFilters}>
               Clear filters
             </button>
@@ -1379,7 +1398,7 @@ export default function Home() {
         </div>
         </div>
 
-        <section id="dashboard" className="metrics">
+        <section id="dashboard" className={["overview", "commitments", "details"].includes(dashboardTab) ? "metrics" : "biHidden"}>
           <MetricCard
             label="Income"
             value={usd(budgetSummary.now.income)}
@@ -1848,7 +1867,7 @@ export default function Home() {
           <div className="legend"><span><i className="dot income" />Income</span><span><i className="dot expense" />Expenses</span></div>
         </section>
 
-        <section id="add" className="panel addPanel">
+        <section id="add" className={dashboardTab === "movements" ? "panel addPanel biView" : "biHidden"}>
           <div className="panelHead">
             <div>
               <p className="eyebrow">QUICK ENTRY</p>
@@ -2031,7 +2050,7 @@ export default function Home() {
           </form>
         </section>
 
-        <section className="panel recurringPanel collapsiblePanel">
+        <section className={dashboardTab === "movements" ? "panel recurringPanel collapsiblePanel biView" : "biHidden"}>
           <button
             type="button"
             className="collapsibleHead"
@@ -2083,11 +2102,11 @@ export default function Home() {
           )}
         </section>
 
-        <section className="panel accountPanel">
+        <section className={dashboardTab === "account" ? "panel accountPanel biView" : "biHidden"}>
           <div className="panelHead">
             <div>
               <p className="eyebrow">ACCOUNT</p>
-              <h2>Cambiar contraseña</h2>
+              <h2>Change password</h2>
             </div>
           </div>
           <form className="passwordChangeRow" onSubmit={saveNewPassword}>
@@ -2101,12 +2120,12 @@ export default function Home() {
               onChange={(e) => setNewPassword(e.target.value)}
               required
             />
-            <button className="primary" type="submit">Cambiar contraseña</button>
+            <button className="primary" type="submit">Change password</button>
           </form>
           {authMessage && <p className="authMessage">{authMessage}</p>}
         </section>
 
-        <section id="history" className="panel collapsiblePanel">
+        <section id="history" className={dashboardTab === "movements" ? "panel collapsiblePanel biView" : "biHidden"}>
           <button
             type="button"
             className="collapsibleHead"
@@ -2131,7 +2150,7 @@ export default function Home() {
                   <tr><th>Date</th><th>Type</th><th>Description</th><th>Original</th><th>USD</th><th></th></tr>
                 </thead>
                 <tbody>
-                  {transactions.slice(0, 30).map((t) => (
+                  {(showAllMovements ? transactions : transactions.slice(0, 30)).map((t) => (
                     <tr key={t.id}>
                       <td>{t.date}</td>
                       <td><span className={`badge ${t.type}`}>{t.type}</span></td>
@@ -2153,6 +2172,17 @@ export default function Home() {
                   ))}
                 </tbody>
               </table>
+              {transactions.length > 30 && (
+                <div className="showAllRow">
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => setShowAllMovements((show) => !show)}
+                  >
+                    {showAllMovements ? "Show latest 30" : `Show all (${transactions.length})`}
+                  </button>
+                </div>
+              )}
             </div>
           )}
             </div>
