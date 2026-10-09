@@ -97,6 +97,18 @@ function previousMonthKey(key: string) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function addMonths(key: string, amount: number) {
+  const [year, month] = key.split("-").map(Number);
+  const d = new Date(year, month - 1 + amount, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(key: string) {
+  const [year, month] = key.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric" })
+    .format(new Date(year, month - 1, 1));
+}
+
 function usd(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -765,6 +777,44 @@ export default function Home() {
     () => installmentSummary.reduce((sum, item) => sum + item.remainingUSD, 0),
     [installmentSummary]
   );
+
+  const installmentCalendar = useMemo(() => {
+    const startMonth = view === "month" ? selectedMonth : `${selectedYear}-01`;
+
+    return Array.from({ length: 12 }, (_, index) => {
+      const month = addMonths(startMonth, index);
+      const plans = recurringTransactions
+        .filter((r) =>
+          r.type === "expense" &&
+          r.active &&
+          Boolean(r.endDate) &&
+          monthKey(r.startDate) <= month &&
+          monthKey(r.endDate!) >= month
+        )
+        .map((r) => ({
+          id: r.id,
+          description: r.description,
+          amount: r.currency === "USD" ? r.amountOriginal : r.amountOriginal / r.fxRate,
+        }));
+
+      return {
+        month,
+        plans,
+        total: plans.reduce((sum, plan) => sum + plan.amount, 0),
+      };
+    });
+  }, [recurringTransactions, view, selectedMonth, selectedYear]);
+
+  const installmentDrop = useMemo(() => {
+    let best: { month: string; drop: number } | null = null;
+    for (let i = 1; i < installmentCalendar.length; i += 1) {
+      const drop = installmentCalendar[i - 1].total - installmentCalendar[i].total;
+      if (drop > 0 && (!best || drop > best.drop)) {
+        best = { month: installmentCalendar[i].month, drop };
+      }
+    }
+    return best;
+  }, [installmentCalendar]);
 
   const monthlyTrend = useMemo(() => {
     const months = new Map<string, { expenses: number; income: number }>();
@@ -1611,6 +1661,39 @@ export default function Home() {
           </div>
         </section>
 
+        <section className={dashboardTab === "commitments" ? "panel installmentCalendarPanel biView" : "biHidden"}>
+          <div className="panelHead">
+            <div>
+              <p className="eyebrow">FORWARD VIEW</p>
+              <h2>Installment calendar</h2>
+            </div>
+            <span className="muted">Next 12 months</span>
+          </div>
+          <div className="installmentCalendar">
+            {installmentCalendar.map((item) => {
+              const max = Math.max(...installmentCalendar.map((row) => row.total), 1);
+              const detail = item.plans.length > 0
+                ? item.plans.map((plan) => `${plan.description}: ${usd(plan.amount)}`).join(" · ")
+                : "No installments";
+              return (
+                <div className="installmentCalendarCol" key={item.month} title={detail}>
+                  <strong>{item.total > 0 ? usd(item.total) : "—"}</strong>
+                  <div className="installmentCalendarTrack">
+                    <div style={{ height: `${item.total > 0 ? Math.max(3, (item.total / max) * 100) : 0}%` }} />
+                  </div>
+                  <span>{monthLabel(item.month).replace(" ", " ’").replace(",", "")}</span>
+                </div>
+              );
+            })}
+          </div>
+          {installmentDrop && (
+            <div className="installmentDropInsight">
+              <span className="insightIcon">↓</span>
+              <p>From <strong>{monthLabel(installmentDrop.month)}</strong> your installments drop by <strong>{usd(installmentDrop.drop)}/month</strong>. Send it to savings.</p>
+            </div>
+          )}
+        </section>
+
         <section className={dashboardTab === "commitments" ? "panel installmentPanel biView" : "biHidden"}>
           <div className="panelHead">
             <div>
@@ -1644,7 +1727,7 @@ export default function Home() {
                     <div className="installmentMeta">
                       <span>{item.remainingInstallments} installments remaining</span>
                       <strong>{usd(item.remainingUSD)} remaining</strong>
-                      <span>Ends {item.endDate}</span>
+                      <span>Last installment: {monthLabel(monthKey(item.endDate!))}</span>
                     </div>
                   </div>
                 );
