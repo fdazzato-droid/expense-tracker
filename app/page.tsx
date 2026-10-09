@@ -54,6 +54,8 @@ const EXPENSE_CATEGORIES = [
   "Car Rental",
   "Tickets",
   "Hotel",
+  "Travel",
+  "Home / Furniture",
   "Subscriptions",
   "Taxes",
   "Transport / Fuel",
