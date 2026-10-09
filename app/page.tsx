@@ -214,33 +214,6 @@ export default function Home() {
   async function loadTransactions() {
     await supabase.rpc("materialize_recurring_transactions");
 
-    const { data, error } = await supabase
-      .from("transactions")
-      .select("*")
-      .order("date", { ascending: false })
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      setAuthMessage(error.message);
-      return;
-    }
-
-    setTransactions((data ?? []).map((row) => ({
-      id: row.id,
-      date: row.date,
-      type: row.type,
-      category: row.category,
-      description: row.description ?? row.category,
-      amountOriginal: Number(row.amount_original),
-      currency: row.currency,
-      fxRate: Number(row.fx_rate),
-      amountUSD: Number(row.amount_usd),
-      paymentMethod: row.payment_method ?? undefined,
-      notes: row.notes ?? undefined,
-      createdAt: row.created_at,
-      recurringId: row.recurring_id ?? undefined,
-    })));
-
     const { data: recurringData, error: recurringError } = await supabase
       .from("recurring_transactions")
       .select("*")
@@ -251,7 +224,7 @@ export default function Home() {
       return;
     }
 
-    setRecurringTransactions((recurringData ?? []).map((row) => ({
+    const mappedRecurring: RecurringTransaction[] = (recurringData ?? []).map((row) => ({
       id: row.id,
       userId: row.user_id,
       type: row.type,
@@ -266,7 +239,48 @@ export default function Home() {
       startDate: row.start_date,
       endDate: row.end_date ?? undefined,
       active: Boolean(row.active),
-    })));
+    }));
+
+    setRecurringTransactions(mappedRecurring);
+    const recurringDescriptions = new Map(mappedRecurring.map((r) => [r.id, r.description]));
+
+    const { data, error } = await supabase
+      .from("transactions")
+      .select("*")
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+
+    setTransactions((data ?? []).map((row) => {
+      const storedDescription = row.description?.trim();
+      const recurringDescription = row.recurring_id
+        ? recurringDescriptions.get(row.recurring_id)
+        : undefined;
+      const description =
+        recurringDescription && (!storedDescription || storedDescription === row.category)
+          ? recurringDescription
+          : storedDescription || row.category;
+
+      return {
+        id: row.id,
+        date: row.date,
+        type: row.type,
+        category: row.category,
+        description,
+        amountOriginal: Number(row.amount_original),
+        currency: row.currency,
+        fxRate: Number(row.fx_rate),
+        amountUSD: Number(row.amount_usd),
+        paymentMethod: row.payment_method ?? undefined,
+        notes: row.notes ?? undefined,
+        createdAt: row.created_at,
+        recurringId: row.recurring_id ?? undefined,
+      };
+    }));
   }
 
   async function signInWithPassword(e?: FormEvent) {
