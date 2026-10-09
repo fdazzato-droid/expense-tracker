@@ -341,10 +341,10 @@ export default function Home() {
 
   async function signInWithPassword(e?: FormEvent) {
     e?.preventDefault();
-    setAuthMessage("Ingresando...");
+    setAuthMessage("Signing in...");
     const normalizedEmail = email.trim().toLowerCase();
     if (!isAllowedEmail(normalizedEmail)) {
-      setAuthMessage("Este email no está habilitado para Finance By Franco.");
+      setAuthMessage("This email is not enabled for Finance By Franco.");
       return;
     }
     const { error } = await supabase.auth.signInWithPassword({
@@ -352,7 +352,7 @@ export default function Home() {
       password,
     });
     if (error) {
-      setAuthMessage("Contraseña incorrecta o todavía no configurada.");
+      setAuthMessage("Incorrect password or password not configured yet.");
       return;
     }
     setAuthMessage("");
@@ -362,24 +362,24 @@ export default function Home() {
   async function sendPasswordSetupLink() {
     const normalizedEmail = email.trim().toLowerCase();
     if (!isAllowedEmail(normalizedEmail)) {
-      setAuthMessage("Este email no está habilitado para Finance By Franco.");
+      setAuthMessage("This email is not enabled for Finance By Franco.");
       return;
     }
-    setAuthMessage("Enviando email...");
+    setAuthMessage("Sending email...");
     const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
       redirectTo: window.location.origin,
     });
     setAuthMessage(
       error
         ? error.message
-        : "Te envié un email para crear o restablecer tu contraseña."
+        : "I sent an email to create or reset your password."
     );
   }
 
   async function saveNewPassword(e?: FormEvent) {
     e?.preventDefault();
     if (newPassword.length < 8) {
-      setAuthMessage("Usá una contraseña de al menos 8 caracteres.");
+      setAuthMessage("Use a password with at least 8 characters.");
       return;
     }
     const { error } = await supabase.auth.updateUser({ password: newPassword });
@@ -389,7 +389,7 @@ export default function Home() {
     }
     setNewPassword("");
     setRecoveryMode(false);
-    setAuthMessage("Contraseña guardada.");
+    setAuthMessage("Password saved.");
     if (typeof window !== "undefined") {
       window.history.replaceState({}, document.title, window.location.pathname);
     }
@@ -437,46 +437,6 @@ export default function Home() {
     });
   }, [periodCurrent, dashboardCategories, dashboardCommitments, recurringTransactions]);
 
-  const previous = useMemo(() => {
-    return periodPrevious.filter((t) => {
-      if (t.type === "income") return true;
-
-      const categoryMatches =
-        dashboardCategories.length === 0 || dashboardCategories.includes(t.category);
-
-      const commitmentMatches =
-        dashboardCommitments.length === 0 ||
-        dashboardCommitments.includes(commitmentTypeForTransaction(t));
-
-      return categoryMatches && commitmentMatches;
-    });
-  }, [periodPrevious, dashboardCategories, dashboardCommitments, recurringTransactions]);
-
-  const stats = useMemo(() => {
-    const calc = (items: Transaction[]) => {
-      const income = items.filter((t) => t.type === "income").reduce((s, t) => s + t.amountUSD, 0);
-      const expenses = items.filter((t) => t.type === "expense").reduce((s, t) => s + t.amountUSD, 0);
-      const savings = income - expenses;
-      const savingsRate = income > 0 ? (savings / income) * 100 : 0;
-      return { income, expenses, savings, savingsRate };
-    };
-    return { now: calc(current), prev: calc(previous) };
-  }, [current, previous]);
-
-  const categoryBreakdown = useMemo(() => {
-    const map = new Map<string, number>();
-    periodCurrent
-      .filter((t) =>
-        t.type === "expense" &&
-        (
-          dashboardCommitments.length === 0 ||
-          dashboardCommitments.includes(commitmentTypeForTransaction(t))
-        )
-      )
-      .forEach((t) => map.set(t.category, (map.get(t.category) || 0) + t.amountUSD));
-    return [...map.entries()].sort((a, b) => b[1] - a[1]);
-  }, [periodCurrent, dashboardCommitments, recurringTransactions]);
-
   const groupedExpenseSummary = useMemo(() => {
     const groups = new Map<string, Transaction[]>();
 
@@ -507,10 +467,6 @@ export default function Home() {
       }))
       .sort((a, b) => b.total - a.total);
   }, [periodCurrent, dashboardCategories, dashboardCommitments, recurringTransactions]);
-
-  const recurringById = useMemo(() => {
-    return new Map(recurringTransactions.map((r) => [r.id, r]));
-  }, [recurringTransactions]);
 
   const budgetSummary = useMemo(() => {
     const calc = (items: Transaction[], monthForTiming: string | null, annual = false) => {
@@ -692,27 +648,6 @@ export default function Home() {
       paceWorks: perDay >= budgetSummary.now.variablePace,
     };
   }, [budgetSummary, savingsTarget]);
-
-  const spendingCommitments = useMemo(() => {
-    let oneOff = 0;
-    let recurringOngoing = 0;
-    let installments = 0;
-
-    current
-      .filter((t) => t.type === "expense")
-      .forEach((t) => {
-        if (!t.recurringId) {
-          oneOff += t.amountUSD;
-          return;
-        }
-
-        const recurring = recurringById.get(t.recurringId);
-        if (recurring?.endDate) installments += t.amountUSD;
-        else recurringOngoing += t.amountUSD;
-      });
-
-    return { oneOff, recurringOngoing, installments };
-  }, [current, recurringById]);
 
   const commitmentDetails = useMemo(() => {
     const types = ["Variable", "Fixed", "Installments"] as const;
@@ -940,15 +875,15 @@ export default function Home() {
     setMovementMessage("");
 
     if (!description.trim()) {
-      setMovementMessage("Agregá una descripción para identificar este movimiento.");
+      setMovementMessage("Add a description to identify this movement.");
       return;
     }
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setMovementMessage("Ingresá un monto válido. Podés usar coma o punto para los decimales.");
+      setMovementMessage("Enter a valid amount. You can use a comma or a period for decimals.");
       return;
     }
     if (currency === "UYU" && (!Number.isFinite(numericFx) || numericFx <= 0)) {
-      setMovementMessage("La cotización UYU/USD no es válida.");
+      setMovementMessage("The UYU/USD exchange rate is not valid.");
       return;
     }
 
@@ -958,7 +893,7 @@ export default function Home() {
       : stripExtraMarker(notes) || null;
 
     if (!user || !isAllowedEmail(user.email)) {
-      setMovementMessage("Tu sesión no está disponible. Volvé a iniciar sesión.");
+      setMovementMessage("Your session is unavailable. Sign in again.");
       return;
     }
 
@@ -1067,7 +1002,7 @@ export default function Home() {
 
       cancelEdit();
       await loadTransactions();
-      setMovementMessage("Cambios guardados.");
+      setMovementMessage("Changes saved.");
       setSavingMovement(false);
       return;
     }
@@ -1134,7 +1069,7 @@ export default function Home() {
     setRepeatDay("1");
     setRepeatEndDate("");
     await loadTransactions();
-    setMovementMessage("Movimiento guardado correctamente.");
+    setMovementMessage("Movement saved successfully.");
     setSavingMovement(false);
   }
 
@@ -1174,7 +1109,7 @@ export default function Home() {
   const maxTrend = Math.max(...monthlyTrend.flatMap(([, v]) => [v.expenses, v.income]), 1);
 
   if (authLoading) {
-    return <main className="authShell"><div className="authCard"><FinanceByFrancoLogo /><p>Verificando acceso...</p></div></main>;
+    return <main className="authShell"><div className="authCard"><FinanceByFrancoLogo /><p>Checking access...</p></div></main>;
   }
 
   if (recoveryMode && isAllowedEmail(user?.email)) {
@@ -1183,8 +1118,8 @@ export default function Home() {
         <form className="authCard" onSubmit={saveNewPassword}>
           <FinanceByFrancoLogo />
           <p className="eyebrow">PRIVATE ACCESS</p>
-          <h1>Crear contraseña</h1>
-          <p>Elegí una contraseña nueva para <strong>{user?.email}</strong>.</p>
+          <h1>Create password</h1>
+          <p>Choose a new password for <strong>{user?.email}</strong>.</p>
           <input
             className="authInput"
             type="password"
@@ -1195,7 +1130,7 @@ export default function Home() {
             onChange={(e) => setNewPassword(e.target.value)}
             required
           />
-          <button className="primary authButton" type="submit">Guardar contraseña</button>
+          <button className="primary authButton" type="submit">Save password</button>
           {authMessage && <p className="authMessage">{authMessage}</p>}
         </form>
       </main>
@@ -1208,7 +1143,7 @@ export default function Home() {
         <form className="authCard" onSubmit={signInWithPassword}>
           <FinanceByFrancoLogo />
           <p className="eyebrow">PRIVATE ACCESS</p>
-          <p>Acceso privado e independiente por usuario.</p>
+          <p>Private, independent access for each user.</p>
           <input
             className="authInput"
             type="email"
@@ -1223,17 +1158,17 @@ export default function Home() {
             type="password"
             autoComplete="current-password"
             minLength={8}
-            placeholder="Contraseña"
+            placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
           />
-          <button className="primary authButton" type="submit">Entrar</button>
+          <button className="primary authButton" type="submit">Sign in</button>
           <button className="secondaryAuthButton" type="button" onClick={sendPasswordSetupLink}>
-            Restablecer contraseña
+            Reset password
           </button>
           {authMessage && <p className="authMessage">{authMessage}</p>}
-          <p className="authHint">Cada usuario ve únicamente sus propios movimientos.</p>
+          <p className="authHint">Each user can only see their own movements.</p>
         </form>
       </main>
     );
@@ -2040,13 +1975,13 @@ export default function Home() {
                     : ""}
               </div>
               {movementMessage && (
-                <span className={movementMessage.toLowerCase().includes("guardad") ? "movementStatus success" : "movementStatus"}>
+                <span className={movementMessage.toLowerCase().includes("saved") ? "movementStatus success" : "movementStatus"}>
                   {movementMessage}
                 </span>
               )}
               {editingId && <button className="ghost" type="button" onClick={cancelEdit} disabled={savingMovement}>Cancel</button>}
               <button className="primary" type="submit" disabled={savingMovement}>
-                {savingMovement ? "Guardando…" : editingId ? "Save changes" : "Save movement"}
+                {savingMovement ? "Saving…" : editingId ? "Save changes" : "Save movement"}
               </button>
             </div>
           </form>
@@ -2117,7 +2052,7 @@ export default function Home() {
               type="password"
               autoComplete="new-password"
               minLength={8}
-              placeholder="Nueva contraseña"
+              placeholder="New password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required

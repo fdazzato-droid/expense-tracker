@@ -1402,3 +1402,11 @@ body {
   .installmentCalendar { grid-template-columns: repeat(12, 52px); height: 205px; }
   .installmentCalendarCol { min-width: 52px; }
 }
+
+/* Final dashboard verification polish */
+.metricCard small { line-height: 1.4; }
+.showAllRow { display: flex; justify-content: center; padding-top: 14px; }
+.showAllRow .ghost { min-width: 140px; }
+@media (max-width: 650px) {
+  .metricCard small { font-size: 11px; }
+}
